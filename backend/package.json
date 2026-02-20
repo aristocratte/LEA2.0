@@ -1,0 +1,49 @@
+{
+  "name": "lea-backend",
+  "version": "1.0.0",
+  "description": "LEA/EASM AI Platform - Backend",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "tsx prisma/seed.ts"
+  },
+  "keywords": [
+    "pentest",
+    "security",
+    "ai",
+    "orchestrator"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
+    "@fastify/cors": "^11.2.0",
+    "@google/generative-ai": "^0.24.1",
+    "@openauthjs/openauth": "^0.4.3",
+    "@prisma/client": "^6.2.1",
+    "@types/express": "^5.0.6",
+    "@types/handlebars": "^4.0.40",
+    "express": "^5.2.1",
+    "fastify": "^5.3.2",
+    "google-auth-library": "^10.5.0",
+    "googleapis": "^171.4.0",
+    "handlebars": "^4.7.8",
+    "pdf-lib": "^1.17.1",
+    "uuid": "^11.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/uuid": "^10.0.0",
+    "nodemon": "^3.1.9",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

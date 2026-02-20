@@ -1,0 +1,726 @@
+// ============================================
+// LEA/EASM AI Platform - Database Schema
+// Version: 1.0.0
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// PENTEST SESSION
+// ============================================
+
+model Pentest {
+  id          String   @id @default(uuid())
+
+  // Target & Scope
+  target      String
+  scope       Json?
+
+  // Configuration
+  config      Json?
+
+  // Status
+  status      PentestStatus @default(CONFIGURING)
+  phase       PentestPhase  @default(INIT)
+  preflight_state PreflightState @default(NOT_RUN)
+  preflight_summary Json?
+  kali_workspace String?
+  failure_code String?
+  failure_reason String? @db.Text
+  finalization_started_at DateTime?
+  findings_locked_at DateTime?
+
+  // Timing
+  started_at  DateTime?
+  ended_at    DateTime?
+  created_at  DateTime      @default(now())
+  updated_at  DateTime      @updatedAt
+
+  // Metrics
+  tokens_used Int           @default(0)
+  cost_usd    Float         @default(0)
+
+  // Relations
+  findings      Finding[]
+  todos         Todo[]
+  messages      Message[]
+  tool_executions ToolExecution[]
+  kali_audit_logs KaliAuditLog[]
+  scope_proposals ScopeProposal[]
+  events        PentestEvent[]
+  report        Report?
+
+  @@index([status])
+  @@index([target])
+  @@index([created_at])
+  @@map("pentests")
+}
+
+enum PentestStatus {
+  CONFIGURING
+  PREFLIGHT
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  ERROR
+}
+
+enum PentestPhase {
+  INIT
+  PREFLIGHT
+  RECON_PASSIVE
+  RECON_ACTIVE
+  VULN_SCAN
+  EXPLOITATION
+  POST_EXPLOIT
+  REPORTING
+  COMPLETE
+}
+
+enum PreflightState {
+  NOT_RUN
+  RUNNING
+  PASSED
+  FAILED
+}
+
+// ============================================
+// FINDING (Vulnerability)
+// ============================================
+
+model Finding {
+  id          String   @id @default(uuid())
+  pentest_id  String
+  report_id   String?
+
+  // Identification
+  title       String
+  severity    Severity
+  category    String
+
+  // Details
+  description String
+  evidence    String?  @db.Text
+  impact      String?  @db.Text
+  remediation String?  @db.Text
+  metadata    Json?
+
+  // Classification
+  cvss_score  Float?
+  cvss_vector String?
+  cve_id      String?
+  cwe_id      String?
+
+  // Context
+  target_host String?
+  endpoint    String?
+  port        Int?
+  protocol    String?
+
+  // Discovery
+  phase_name  String?
+  tool_used   String?
+  source_signal_type FindingSourceSignalType?
+
+  // Status
+  status      FindingStatus @default(OPEN)
+  verified    Boolean       @default(false)
+  false_positive Boolean    @default(false)
+  verification_state FindingVerificationState @default(PROVISIONAL)
+  proposed_severity Severity?
+  evidence_score Int @default(0)
+  reason_codes String[] @default([])
+
+  // Timestamps
+  created_at   DateTime     @default(now())
+  discovered_at DateTime    @default(now())
+  updated_at   DateTime     @updatedAt
+
+  // Relations
+  pentest     Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+  report      Report?  @relation(fields: [report_id], references: [id], onDelete: SetNull)
+
+  @@index([pentest_id])
+  @@index([report_id])
+  @@index([severity])
+  @@index([category])
+  @@index([verification_state])
+  @@map("findings")
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFORMATIONAL
+}
+
+enum FindingStatus {
+  OPEN
+  CONFIRMED
+  FALSE_POSITIVE
+  FIXED
+  RISK_ACCEPTED
+}
+
+enum FindingVerificationState {
+  PROVISIONAL
+  CONFIRMED
+  REJECTED
+}
+
+enum FindingSourceSignalType {
+  TOOL_RESULT
+  PENTESTER_REPORTED
+}
+
+model ScopeProposal {
+  id          String   @id @default(uuid())
+  pentest_id  String
+
+  base_target String
+  source      ScopeProposalSource @default(WHOIS_ORG_CORRELATION)
+  status      ScopeProposalStatus @default(PENDING)
+  summary     Json?
+
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  decided_at  DateTime?
+
+  pentest     Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+  candidates  ScopeProposalCandidate[]
+
+  @@index([pentest_id])
+  @@index([status])
+  @@index([created_at])
+  @@map("scope_proposals")
+}
+
+enum ScopeProposalSource {
+  WHOIS_ORG_CORRELATION
+}
+
+enum ScopeProposalStatus {
+  PENDING
+  PARTIAL
+  APPROVED
+  REJECTED
+}
+
+model ScopeProposalCandidate {
+  id                    String   @id @default(uuid())
+  proposal_id           String
+  domain                String
+  confidence            Int      @default(0)
+  recommended           Boolean  @default(false)
+  recommendation_reason String?  @db.Text
+  evidence              Json?
+  decision              ScopeCandidateDecision @default(PENDING)
+  decided_at            DateTime?
+
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  proposal              ScopeProposal @relation(fields: [proposal_id], references: [id], onDelete: Cascade)
+
+  @@index([proposal_id])
+  @@index([decision])
+  @@index([recommended])
+  @@index([confidence])
+  @@unique([proposal_id, domain])
+  @@map("scope_proposal_candidates")
+}
+
+enum ScopeCandidateDecision {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================
+// TODO (Task)
+// ============================================
+
+model Todo {
+  id          String   @id @default(uuid())
+  pentest_id  String
+
+  // Content
+  content     String
+  priority    Int      @default(0)
+
+  // Status
+  status      TodoStatus @default(PENDING)
+
+  // Assignment
+  agent_role  String?
+
+  // Dependencies
+  depends_on  String[]
+
+  // Timestamps
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  started_at  DateTime?
+  completed_at DateTime?
+
+  // Relations
+  pentest     Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+
+  @@index([pentest_id])
+  @@index([status])
+  @@map("todos")
+}
+
+enum TodoStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  ERROR
+}
+
+// ============================================
+// MESSAGE (Chat/Communication)
+// ============================================
+
+model Message {
+  id          String   @id @default(uuid())
+  pentest_id  String
+
+  // Content
+  type        MessageType
+  content     String   @db.Text
+  agent_role  String?
+
+  // Sequence for ordering
+  sequence    Int
+
+  // Timestamps
+  created_at  DateTime @default(now())
+
+  // Relations
+  pentest     Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+
+  @@index([pentest_id])
+  @@index([sequence])
+  @@unique([pentest_id, sequence])
+  @@map("messages")
+}
+
+enum MessageType {
+  USER
+  ASSISTANT
+  THINKING
+  SYSTEM
+}
+
+// ============================================
+// TOOL EXECUTION
+// ============================================
+
+model ToolExecution {
+  id          String   @id @default(uuid())
+  pentest_id  String
+
+  // Tool info
+  tool_name   String
+  parameters  Json
+
+  // Status
+  status      ToolStatus @default(PENDING)
+
+  // Results
+  output      String?  @db.Text
+  error       String?  @db.Text
+  exit_code   Int?
+
+  // Timing
+  duration_ms Int?
+  started_at  DateTime?
+  ended_at    DateTime?
+
+  // Context
+  agent_role  String?
+
+  // Timestamps
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relations
+  pentest     Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+
+  @@index([pentest_id])
+  @@index([tool_name])
+  @@index([status])
+  @@map("tool_executions")
+}
+
+model KaliAuditLog {
+  id          String   @id @default(uuid())
+  pentest_id  String
+
+  actor       String
+  tool_name   String
+  command     String?
+  arguments   Json?
+  cwd         String?
+  status      KaliAuditStatus
+
+  output      String?  @db.Text
+  error       String?  @db.Text
+  exit_code   Int?
+  duration_ms Int?
+
+  created_at  DateTime @default(now())
+
+  pentest     Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+
+  @@index([pentest_id])
+  @@index([created_at])
+  @@map("kali_audit_logs")
+}
+
+enum KaliAuditStatus {
+  SUCCESS
+  FAILED
+  BLOCKED
+}
+
+enum ToolStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  TIMEOUT
+  CANCELLED
+}
+
+// ============================================
+// PENTEST EVENT (Event sourcing)
+// ============================================
+
+model PentestEvent {
+  id          String   @id @default(uuid())
+  pentest_id  String
+
+  // Event data
+  event_type  String
+  event_data  Json
+
+  // Sequence
+  sequence    Int
+
+  // Timestamp
+  created_at  DateTime @default(now())
+
+  // Relations
+  pentest     Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+
+  @@index([pentest_id])
+  @@index([event_type])
+  @@unique([pentest_id, sequence])
+  @@map("pentest_events")
+}
+
+// ============================================
+// REPORT
+// ============================================
+
+model Report {
+  id                  String   @id @default(uuid())
+  pentest_id          String   @unique
+
+  // Content
+  title               String
+  executive_summary   String?  @db.Text
+  methodology         String?  @db.Text
+  scope_description   String?  @db.Text
+
+  // Status
+  status              ReportStatus @default(DRAFT)
+
+  // Stats (denormalized for performance)
+  stats               Json?
+
+  // Template
+  template            String   @default("standard")
+  confidential        Boolean  @default(true)
+
+  // Timestamps
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+  completed_at        DateTime?
+
+  // Relations
+  pentest             Pentest       @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+  findings            Finding[]
+  exports             ExportJob[]
+
+  @@index([status])
+  @@map("reports")
+}
+
+enum ReportStatus {
+  DRAFT
+  COMPLETE
+  ARCHIVED
+}
+
+// ============================================
+// EXPORT JOB (Async exports)
+// ============================================
+
+model ExportJob {
+  id              String   @id @default(uuid())
+  reportId        String
+  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  format          ExportFormat
+  options         Json?
+
+  status          JobStatus @default(PENDING)
+
+  file_path       String?
+  file_size       Int?
+  error           String?   @db.Text
+
+  created_at      DateTime @default(now())
+  completed_at    DateTime?
+
+  @@index([reportId])
+  @@index([status])
+  @@map("export_jobs")
+}
+
+enum ExportFormat {
+  PDF
+  HTML
+  JSON
+  DOCX
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ============================================
+// PROVIDER (AI Provider)
+// ============================================
+
+model Provider {
+  id          String   @id @default(uuid())
+
+  // Identity
+  name        String              @unique
+  display_name String
+  type        ProviderType
+
+  // Configuration (encrypted API key)
+  api_key_encrypted String?
+  api_key_iv        String?
+  api_key_hash      String?
+  api_key_auth_tag  String?
+  base_url          String?
+
+  // OAuth (for Gemini CLI credentials)
+  oauth_access_token  String?  @db.Text
+  oauth_refresh_token String?  @db.Text
+  oauth_expiry        DateTime?
+
+  // Settings
+  is_default  Boolean  @default(false)
+  priority    Int      @default(1)
+  enabled     Boolean  @default(true)
+
+  // Health
+  health_status HealthStatus @default(UNKNOWN)
+  last_health_check DateTime?
+  last_error  String?
+
+  // Timestamps
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  last_used_at DateTime?
+
+  // Relations
+  models      ModelConfig[]
+  usage_records ProviderUsage[]
+
+  @@map("providers")
+}
+
+enum ProviderType {
+  ANTHROPIC
+  ZHIPU
+  OPENAI
+  CUSTOM
+  GEMINI
+  ANTIGRAVITY
+}
+
+enum HealthStatus {
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  UNKNOWN
+}
+
+// ============================================
+// MCP SERVER
+// ============================================
+
+model McpServer {
+  id          String   @id @default(uuid())
+
+  // Identity
+  name        String              @unique
+  display_name String
+  description String?
+
+  // Connection
+  transport   McpTransport
+  endpoint    String?
+  command     String?
+  args        Json?
+
+  // Status
+  enabled     Boolean  @default(true)
+  health      HealthStatus @default(UNKNOWN)
+  last_ping   DateTime?
+
+  // Tools (cached)
+  tools       Json?
+
+  // Timestamps
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("mcp_servers")
+}
+
+enum McpTransport {
+  STDIO
+  HTTP
+  WEBSOCKET
+}
+
+// ============================================
+// MODEL CONFIG (Provider Models)
+// ============================================
+
+model ModelConfig {
+  id                    String   @id @default(uuid())
+  provider_id           String
+
+  // Identification
+  model_id              String              // ex: "claude-sonnet-4"
+  display_name          String              // ex: "Claude Sonnet 4"
+
+  // Capacités
+  context_window        Int                 // tokens
+  max_output_tokens     Int
+  supports_streaming    Boolean  @default(true)
+  supports_vision       Boolean  @default(false)
+  supports_tools        Boolean  @default(true)
+
+  // Pricing (USD per 1K tokens)
+  input_price_per_1k    Float
+  output_price_per_1k   Float
+
+  // Usage
+  enabled               Boolean  @default(true)
+  usage_count           Int      @default(0)
+  last_used_at          DateTime?
+
+  // Relations
+  provider              Provider @relation(fields: [provider_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider_id, model_id])
+  @@map("model_configs")
+}
+
+// ============================================
+// PROVIDER USAGE (Daily stats)
+// ============================================
+
+model ProviderUsage {
+  id                    String   @id @default(uuid())
+  provider_id           String
+
+  // Métriques quotidiennes
+  date                  DateTime @default(now())
+
+  tokens_input          Int      @default(0)
+  tokens_output         Int      @default(0)
+  requests_count        Int      @default(0)
+  cost_estimate_usd     Float    @default(0)
+
+  // Rate Limit
+  rate_limit_remaining  Int?
+  rate_limit_reset      DateTime?
+
+  // Relations
+  provider              Provider @relation(fields: [provider_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider_id, date])
+  @@map("provider_usage")
+}
+  
+// ============================================
+// CONTEXT MEMORY
+// ============================================
+
+model ContextSnapshot {
+  id          String   @id @default(uuid())
+  pentest_id  String
+
+  trigger     ContextCompactionTrigger
+  phase_from  String?
+  phase_to    String?
+  summary_markdown String  @db.Text
+  summary_json     Json
+  workspace_file   String?
+
+  archived_until_message_seq Int?
+  archived_until_tool_ts     DateTime?
+
+  created_at  DateTime @default(now())
+
+  @@index([pentest_id])
+  @@index([created_at])
+  @@map("context_snapshots")
+}
+
+enum ContextCompactionTrigger {
+  PHASE_END
+  URGENT
+  ERROR_RECOVERY
+  MANUAL
+}
+
+model ContextRecallLog {
+  id          String   @id @default(uuid())
+  pentest_id  String
+  actor       String
+  query       String
+  results_json Json
+
+  created_at  DateTime @default(now())
+
+  @@index([pentest_id])
+  @@map("context_recall_logs")
+}
+

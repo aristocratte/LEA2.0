@@ -1,0 +1,162 @@
+name: lea
+
+services:
+  # ============================================
+  # Kali MCP Service (LEA Managed)
+  # ============================================
+  lea-kali-mcp:
+    build:
+      context: ./docker/kali-mcp
+      dockerfile: Dockerfile
+    container_name: lea-kali-mcp
+    restart: unless-stopped
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 3002
+      WORKSPACE_ROOT: /workspace
+    ports:
+      - "3002:3002"
+    volumes:
+      - kali_pentests:/workspace/pentests
+      - kali_shared:/workspace/shared
+      - kali_logs:/workspace/logs
+    networks:
+      - lea-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/lea-kali/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: lea-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lea_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lea_secure_password_change_in_production}
+      POSTGRES_DB: ${POSTGRES_DB:-lea_platform}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    # Comment out port mapping in production
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lea_admin} -d ${POSTGRES_DB:-lea_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lea-network
+
+  # ============================================
+  # Backend API Service
+  # ============================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lea-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOST: 0.0.0.0
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+      - ~/.gemini:/home/lea/.gemini:ro
+    ports:
+      - "3001:3001"
+      - "51121:51121"
+    depends_on:
+      lea-kali-mcp:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - lea-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # Frontend UI Service (Next.js)
+  # ============================================
+  frontend:
+    build:
+      context: ./lea-app
+      dockerfile: Dockerfile
+    container_name: lea-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE: http://backend:3001
+      NEXT_PUBLIC_WS_BASE: ws://backend:3001
+      API_URL: http://backend:3001
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - lea-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # PgAdmin (Optional - for database management)
+  # ============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: lea-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@lea-platform.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - lea-network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    # Comment out this service in production
+
+networks:
+  lea-network:
+    driver: bridge
+    name: lea-network
+
+volumes:
+  kali_pentests:
+    name: lea-kali-pentests
+  kali_shared:
+    name: lea-kali-shared
+  kali_logs:
+    name: lea-kali-logs
+  postgres_data:
+    name: lea-postgres-data
+  backend_uploads:
+    name: lea-backend-uploads
+  backend_logs:
+    name: lea-backend-logs
+  pgadmin_data:
+    name: lea-pgadmin-data
