@@ -137,33 +137,62 @@ export class ScopeRecommendationService {
     if (preferredProviderId) {
       const selectedProvider = await providerManager.getProvider(preferredProviderId);
       if (selectedProvider && (selectedProvider.type === 'GEMINI' || selectedProvider.type === 'ANTIGRAVITY' || selectedProvider.decryptedKey)) {
-        return this.providerToAIClient(selectedProvider.type, selectedProvider.decryptedKey || '', selectedProvider.base_url || undefined, selectedProvider.oauth_refresh_token || undefined);
+        return this.providerToAIClient(
+          selectedProvider.type,
+          selectedProvider.decryptedKey || '',
+          selectedProvider.base_url || undefined,
+          selectedProvider.oauth_refresh_token || undefined,
+          {
+            accessToken: selectedProvider.oauth_access_token || undefined,
+            refreshToken: selectedProvider.oauth_refresh_token || undefined,
+            expiresAt: selectedProvider.oauth_expiry || undefined,
+          }
+        );
       }
     }
 
     const fallback = await providerManager.selectProvider('analysis');
     if (fallback && (fallback.type === 'GEMINI' || fallback.type === 'ANTIGRAVITY' || fallback.decryptedKey)) {
-      return this.providerToAIClient(fallback.type, fallback.decryptedKey || '', fallback.base_url || undefined, fallback.oauth_refresh_token || undefined);
+      return this.providerToAIClient(
+        fallback.type,
+        fallback.decryptedKey || '',
+        fallback.base_url || undefined,
+        fallback.oauth_refresh_token || undefined,
+        {
+          accessToken: fallback.oauth_access_token || undefined,
+          refreshToken: fallback.oauth_refresh_token || undefined,
+          expiresAt: fallback.oauth_expiry || undefined,
+        }
+      );
     }
 
     return null;
   }
 
-  private providerToAIClient(type: string, apiKey: string, baseUrl?: string, oauthToken?: string): AIClient {
+  private providerToAIClient(
+    type: string,
+    apiKey: string,
+    baseUrl?: string,
+    oauthToken?: string,
+    geminiOAuth?: { accessToken?: string; refreshToken?: string; expiresAt?: Date | string | null }
+  ): AIClient {
     switch (type) {
       case 'ZHIPU':
-        return new ZhipuClient(apiKey, baseUrl || undefined);
+        return new ZhipuClient(apiKey, baseUrl || undefined, 'zhipu');
       case 'OPENAI':
-        return new ZhipuClient(apiKey, baseUrl || 'https://api.openai.com/v1');
+        return new ZhipuClient(apiKey, baseUrl || 'https://api.openai.com/v1', 'openai');
       case 'ANTHROPIC':
         return new AnthropicClient(apiKey);
       case 'GEMINI':
-        return new GeminiClient(apiKey);
+        return new GeminiClient(apiKey, geminiOAuth);
       case 'ANTIGRAVITY':
-        return new AntigravityClient(oauthToken || apiKey);
+        if (!oauthToken) {
+          throw new Error('Antigravity provider requires OAuth login before use.');
+        }
+        return new AntigravityClient(oauthToken);
       default:
         if (baseUrl) {
-          return new ZhipuClient(apiKey, baseUrl);
+          return new ZhipuClient(apiKey, baseUrl, 'custom');
         }
         return new AnthropicClient(apiKey);
     }
@@ -174,8 +203,12 @@ export class ScopeRecommendationService {
     switch (client.getProviderName()) {
       case 'zhipu':
         return 'glm-4.7';
+      case 'openai':
+        return 'gpt-4o';
       case 'gemini':
         return 'gemini-2.5-pro';
+      case 'antigravity':
+        return 'antigravity-gemini-3-pro';
       case 'anthropic':
       default:
         return 'claude-sonnet-4-20250514';

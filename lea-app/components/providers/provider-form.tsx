@@ -50,8 +50,9 @@ export function ProviderForm() {
     const [mappingOpen, setMappingOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
-    const [geminiCliStatus, setGeminiCliStatus] = useState<{ available: boolean; expires_at?: string | null } | null>(null);
+    const [geminiCliStatus, setGeminiCliStatus] = useState<{ available: boolean; expires_at?: string | null; source?: 'cli' | 'oauth' | 'none'; db_oauth_configured?: boolean; cli_credentials_detected?: boolean } | null>(null);
     const [geminiCliLoading, setGeminiCliLoading] = useState(false);
+    const [geminiOauthLoading, setGeminiOauthLoading] = useState(false);
 
     const selectedProvider = providers.find((p) => p.id === selectedProviderId);
 
@@ -100,6 +101,29 @@ export function ProviderForm() {
             setGeminiCliStatus({ available: false });
         } finally {
             setGeminiCliLoading(false);
+        }
+    };
+
+
+    const connectGeminiOAuth = async () => {
+        setGeminiOauthLoading(true);
+        try {
+            const res = await fetch('/api/providers/oauth/gemini', { method: 'POST' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data?.error || 'Failed to initiate Gemini OAuth flow');
+            }
+            if (data?.url) {
+                window.open(data.url, '_blank');
+            }
+            setTimeout(() => {
+                fetchGeminiCliStatus();
+                fetchProviders();
+            }, 1500);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setGeminiOauthLoading(false);
         }
     };
 
@@ -259,10 +283,11 @@ export function ProviderForm() {
                             </div>
 
                             {/* Gemini CLI Status */}
+                            {/* Gemini CLI / OAuth Status */}
                             {selectedProvider?.type === 'gemini' && (
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
-                                        <Label className="text-sm text-[#b0b0b8]">Gemini CLI Authentication</Label>
+                                        <Label className="text-sm text-[#b0b0b8]">Gemini Authentication</Label>
                                         <button
                                             onClick={fetchGeminiCliStatus}
                                             disabled={geminiCliLoading}
@@ -284,36 +309,45 @@ export function ProviderForm() {
                                         )} />
                                         <div className="flex-1 min-w-0">
                                             {geminiCliStatus === null || geminiCliLoading ? (
-                                                <p className="text-xs text-[#85858f]">Checking OAuth status...</p>
+                                                <p className="text-xs text-[#85858f]">Checking Gemini auth status...</p>
                                             ) : geminiCliStatus.available ? (
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between gap-3">
                                                     <div>
-                                                        <p className="text-xs font-medium text-green-400">Gemini CLI Connected (OAuth)</p>
+                                                        <p className="text-xs font-medium text-green-400">
+                                                            {geminiCliStatus.source === 'oauth'
+                                                                ? 'Gemini OAuth Connected'
+                                                                : 'Gemini CLI Connected'}
+                                                        </p>
                                                         {geminiCliStatus.expires_at && (
                                                             <p className="text-[10px] text-[#85858f] mt-0.5">
                                                                 Token expires: {new Date(geminiCliStatus.expires_at).toLocaleString()}
                                                             </p>
                                                         )}
                                                     </div>
-                                                    {selectedProvider.apiKey && (
-                                                        <button
-                                                            onClick={() => {
-                                                                updateProviderLocal(selectedProvider.id, { apiKey: '' });
-                                                                setIsDirty(true);
-                                                            }}
-                                                            className="px-2 py-1 text-[10px] font-medium rounded bg-white/[0.1] hover:bg-white/[0.15] text-white transition-colors"
-                                                        >
-                                                            Use CLI OAuth
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={connectGeminiOAuth}
+                                                        disabled={geminiOauthLoading}
+                                                        className="px-2 py-1 text-[10px] font-medium rounded bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white transition-colors"
+                                                    >
+                                                        {geminiOauthLoading ? 'Connecting…' : (geminiCliStatus.source === 'oauth' ? 'Reconnect OAuth' : 'Use OAuth')}
+                                                    </button>
                                                 </div>
                                             ) : (
-                                                <>
-                                                    <p className="text-xs font-medium text-yellow-400">CLI OAuth not detected</p>
-                                                    <p className="text-[10px] text-[#85858f] mt-0.5 leading-relaxed">
-                                                        Run <code className="font-mono bg-white/[0.07] px-1 rounded">gemini auth login</code> on your host machine to authorize with your Google account.
-                                                    </p>
-                                                </>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <p className="text-xs font-medium text-yellow-400">No Gemini auth detected</p>
+                                                        <p className="text-[10px] text-[#85858f] mt-0.5 leading-relaxed">
+                                                            Connect with Google OAuth (recommended) or run <code className="font-mono bg-white/[0.07] px-1 rounded">gemini auth login</code> on host.
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        onClick={connectGeminiOAuth}
+                                                        disabled={geminiOauthLoading}
+                                                        className="px-2 py-1 text-[10px] font-medium rounded bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white transition-colors"
+                                                    >
+                                                        {geminiOauthLoading ? 'Connecting…' : 'Connect OAuth'}
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -321,6 +355,7 @@ export function ProviderForm() {
                             )}
 
                             {/* Antigravity OAuth */}
+
                             {selectedProvider?.type === 'antigravity' && (
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">

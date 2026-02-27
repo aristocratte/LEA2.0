@@ -58,14 +58,16 @@ interface ZhipuStreamChunk {
 export class ZhipuClient implements AIClient {
     private apiKey: string;
     private baseUrl: string;
+    private providerName: 'zhipu' | 'openai' | 'custom';
 
-    constructor(apiKey: string, baseUrl?: string) {
+    constructor(apiKey: string, baseUrl?: string, providerName: 'zhipu' | 'openai' | 'custom' = 'zhipu') {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl || ZHIPU_BASE_URL;
+        this.providerName = providerName;
     }
 
     getProviderName(): string {
-        return 'zhipu';
+        return this.providerName;
     }
 
     async streamChat(params: StreamChatParams): Promise<StreamResult> {

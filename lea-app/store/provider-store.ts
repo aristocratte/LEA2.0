@@ -38,7 +38,9 @@ function fromApiProvider(apiProvider: ApiProvider): Provider {
     displayName: apiProvider.display_name || apiProvider.name,
     enabled: apiProvider.enabled ?? true,
     apiKey: '', // Never populate with masked hash - user must enter a new key
-    apiKeyConfigured: !!apiProvider.api_key_hash,
+    apiKeyConfigured:
+      !!apiProvider.api_key_hash ||
+      ((apiProvider.type === 'ANTIGRAVITY' || apiProvider.type === 'GEMINI') && !!apiProvider.oauth_configured),
     baseUrl: apiProvider.base_url,
     organizationId: apiProvider.organization_id,
     models: (apiProvider.models || []).map((m): ModelConfig => ({

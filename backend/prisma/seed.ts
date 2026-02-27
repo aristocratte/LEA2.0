@@ -43,8 +43,9 @@ const DEFAULT_PROVIDERS = [
             { model_id: 'gemini-3-pro-preview', display_name: 'Gemini 3 Pro (Preview)', context_window: 2000000, max_output_tokens: 8192 },
             { model_id: 'gemini-3-flash-preview', display_name: 'Gemini 3 Flash (Preview)', context_window: 2000000, max_output_tokens: 8192 },
             { model_id: 'gemini-2.5-pro', display_name: 'Gemini 2.5 Pro', context_window: 2000000, max_output_tokens: 8192 },
+            { model_id: 'gemini-2.5-flash', display_name: 'Gemini 2.5 Flash', context_window: 1000000, max_output_tokens: 8192 },
+            { model_id: 'gemini-2.5-flash-lite', display_name: 'Gemini 2.5 Flash Lite', context_window: 1000000, max_output_tokens: 8192 },
             { model_id: 'gemini-2.0-flash', display_name: 'Gemini 2.0 Flash', context_window: 1000000, max_output_tokens: 8192 },
-            { model_id: 'gemini-1.5-pro-002', display_name: 'Gemini 1.5 Pro-002', context_window: 2000000, max_output_tokens: 8192 },
         ]
     }
 ];

@@ -19,6 +19,7 @@ export interface ToolUseContent {
     id: string;
     name: string;
     input: Record<string, unknown>;
+    thought_signature?: string;
 }
 
 export interface ToolResultContent {
@@ -56,7 +57,7 @@ export type AgentEvent =
     | { type: 'message_start' }
     | { type: 'text_delta'; text: string }
     | { type: 'message_end' }
-    | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+    | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; thought_signature?: string }
     | { type: 'message_stop'; stopReason: string }
     | { type: 'usage'; inputTokens: number; outputTokens: number };
 

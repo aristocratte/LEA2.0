@@ -11,6 +11,8 @@ import { ANTIGRAVITY_ENDPOINT, refreshAccessToken } from './antigravity/oauth.js
 
 interface GeminiPart {
     text?: string;
+    thoughtSignature?: string;
+    thought_signature?: string;
     functionCall?: {
         name: string;
         args: Record<string, any>;
@@ -39,6 +41,7 @@ export class AntigravityClient implements AIClient {
     private projectId: string;
     private accessToken: string | null = null;
     private tokenExpiresAt: number = 0;
+    private projectResolved: boolean = false;
 
     constructor(refreshToken: string, projectId: string = 'rising-fact-p41fc') {
         this.refreshToken = refreshToken;
@@ -46,7 +49,7 @@ export class AntigravityClient implements AIClient {
     }
 
     getProviderName(): string {
-        return 'ANTIGRAVITY';
+        return 'antigravity';
     }
 
     private async ensureValidToken(): Promise<string> {
@@ -74,8 +77,55 @@ export class AntigravityClient implements AIClient {
         };
     }
 
+    private async ensureProjectId(token: string): Promise<void> {
+        if (this.projectResolved && this.projectId) {
+            return;
+        }
+
+        const endpoints = [
+            ANTIGRAVITY_ENDPOINT || "https://daily-cloudcode-pa.sandbox.googleapis.com",
+            "https://autopush-cloudcode-pa.sandbox.googleapis.com",
+            "https://cloudcode-pa.googleapis.com",
+        ];
+        const uniqueEndpoints = [...new Set(endpoints)];
+        const body = JSON.stringify({
+            metadata: {
+                ideType: "IDE_UNSPECIFIED",
+                platform: "PLATFORM_UNSPECIFIED",
+                pluginType: "GEMINI",
+            },
+        });
+
+        for (const endpoint of uniqueEndpoints) {
+            try {
+                const response = await fetch(`${endpoint}/v1internal:loadCodeAssist`, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                    body,
+                });
+
+                if (!response.ok) continue;
+                const payload = await response.json() as Record<string, unknown>;
+                const project = typeof payload.cloudaicompanionProject === 'string'
+                    ? payload.cloudaicompanionProject
+                    : undefined;
+                if (project) {
+                    this.projectId = project;
+                    this.projectResolved = true;
+                    return;
+                }
+            } catch {
+                // Try next endpoint
+            }
+        }
+    }
+
     private toGeminiContents(messages: ChatMessage[]): GeminiContent[] {
         const contents: GeminiContent[] = [];
+        const toolNameById = new Map<string, string>();
 
         for (const msg of messages) {
             const role = msg.role === 'assistant' ? 'model' : 'user';
@@ -86,36 +136,42 @@ export class AntigravityClient implements AIClient {
             }
 
             const parts: GeminiPart[] = [];
+            const functionResponseParts: GeminiPart[] = [];
             for (const block of msg.content) {
                 if (block.type === 'text') {
                     parts.push({ text: block.text });
                 } else if (block.type === 'tool_use') {
-                    parts.push({
+                    toolNameById.set(block.id, block.name);
+                    const part: GeminiPart = {
                         functionCall: {
                             name: block.name,
                             args: block.input,
                         },
-                    });
-                } else if (block.type === 'tool_result') {
-                    if (parts.length > 0) {
-                        contents.push({ role, parts: [...parts] });
-                        parts.length = 0;
+                    };
+                    if (typeof block.thought_signature === 'string' && block.thought_signature.trim()) {
+                        part.thoughtSignature = block.thought_signature;
                     }
-                    contents.push({
-                        role: 'user',
-                        parts: [{
-                            functionResponse: {
-                                name: block.tool_use_id,
-                                response: { result: block.content },
+                    parts.push(part);
+                } else if (block.type === 'tool_result') {
+                    const toolName = toolNameById.get(block.tool_use_id) || block.tool_use_id;
+                    functionResponseParts.push({
+                        functionResponse: {
+                            name: toolName,
+                            response: {
+                                result: block.content,
+                                is_error: block.is_error === true,
+                                tool_use_id: block.tool_use_id,
                             },
-                        }],
+                        },
                     });
-                    continue;
                 }
             }
 
             if (parts.length > 0) {
                 contents.push({ role, parts });
+            }
+            if (functionResponseParts.length > 0) {
+                contents.push({ role: 'user', parts: functionResponseParts });
             }
         }
 
@@ -133,6 +189,35 @@ export class AntigravityClient implements AIClient {
         }];
     }
 
+    private parseToolInput(rawArgs: unknown): Record<string, unknown> {
+        if (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
+            return rawArgs as Record<string, unknown>;
+        }
+
+        if (typeof rawArgs === 'string') {
+            try {
+                const parsed = JSON.parse(rawArgs);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    return parsed as Record<string, unknown>;
+                }
+            } catch {
+                // Ignore parse errors and fallback to empty input.
+            }
+        }
+
+        return {};
+    }
+
+    private extractThoughtSignature(part: GeminiPart): string | undefined {
+        if (typeof part.thoughtSignature === 'string' && part.thoughtSignature.trim()) {
+            return part.thoughtSignature.trim();
+        }
+        if (typeof part.thought_signature === 'string' && part.thought_signature.trim()) {
+            return part.thought_signature.trim();
+        }
+        return undefined;
+    }
+
     async streamChat(params: StreamChatParams): Promise<StreamResult> {
         const {
             model,
@@ -145,7 +230,13 @@ export class AntigravityClient implements AIClient {
         } = params;
 
         const token = await this.ensureValidToken();
-        const endpoint = ANTIGRAVITY_ENDPOINT || "https://daily-cloudcode-pa.sandbox.googleapis.com";
+        await this.ensureProjectId(token);
+        const endpoints = [
+            ANTIGRAVITY_ENDPOINT || "https://daily-cloudcode-pa.sandbox.googleapis.com",
+            "https://autopush-cloudcode-pa.sandbox.googleapis.com",
+            "https://cloudcode-pa.googleapis.com",
+        ];
+        const uniqueEndpoints = [...new Set(endpoints)];
 
         const requestBody: any = {
             project: this.projectId,
@@ -169,23 +260,36 @@ export class AntigravityClient implements AIClient {
             requestBody.request.tools = this.toGeminiTools(tools);
         }
 
-        const response = await fetch(`${endpoint}/v1internal:streamGenerateContent?alt=sse`, {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${token}`,
-                "Content-Type": "application/json",
-                ...this.getAntigravityHeaders(),
-            },
-            body: JSON.stringify(requestBody),
-            signal: signal as any,
-        });
+        let response: Response | null = null;
+        const errors: string[] = [];
 
-        if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`Antigravity API error ${response.status}: ${err}`);
+        for (const endpoint of uniqueEndpoints) {
+            const attempt = await fetch(`${endpoint}/v1internal:streamGenerateContent?alt=sse`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                    ...this.getAntigravityHeaders(),
+                },
+                body: JSON.stringify(requestBody),
+                signal: signal as any,
+            });
+
+            if (attempt.ok) {
+                response = attempt;
+                break;
+            }
+
+            const err = await attempt.text();
+            errors.push(`${endpoint} -> ${attempt.status}: ${err.substring(0, 220)}`);
+        }
+
+        if (!response) {
+            throw new Error(`Antigravity API error: ${errors.join(' | ')}`);
         }
 
         const contentBlocks: ContentBlock[] = [];
+        const functionCallStateByPartIndex = new Map<number, { key: string; blockIndex: number }>();
         let inputTokens = 0;
         let outputTokens = 0;
         let stopReason: StreamResult['stopReason'] = 'end_turn';
@@ -197,6 +301,79 @@ export class AntigravityClient implements AIClient {
 
         onEvent({ type: 'message_start' });
 
+        const processSseLine = (line: string): void => {
+            if (!line.startsWith('data: ')) return;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr || jsonStr === '[DONE]') return;
+
+            let chunk: any;
+            try {
+                chunk = JSON.parse(jsonStr);
+            } catch {
+                return;
+            }
+
+            const payload = chunk.response ?? chunk;
+            const candidate = payload?.candidates?.[0];
+            if (!candidate) return;
+
+            const parts: GeminiPart[] = candidate.content?.parts || [];
+            for (const [partIndex, part] of parts.entries()) {
+                if (part.text !== undefined) {
+                    accumulatedText += part.text;
+                    onEvent({ type: 'text_delta', text: part.text });
+                }
+
+                if (part.functionCall) {
+                    const input = this.parseToolInput(part.functionCall.args);
+                    const thoughtSignature = this.extractThoughtSignature(part);
+                    const callName = String(part.functionCall.name || '').trim();
+                    const callKey = `${callName}:${JSON.stringify(input)}`;
+                    const existing = functionCallStateByPartIndex.get(partIndex);
+
+                    if (existing && existing.key === callKey) {
+                        const existingBlock = contentBlocks[existing.blockIndex];
+                        if (existingBlock?.type === 'tool_use' && thoughtSignature && !existingBlock.thought_signature) {
+                            existingBlock.thought_signature = thoughtSignature;
+                        }
+                        stopReason = 'tool_use';
+                        continue;
+                    }
+
+                    const toolId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                    const blockIndex = contentBlocks.push({
+                        type: 'tool_use',
+                        id: toolId,
+                        name: callName,
+                        input,
+                        thought_signature: thoughtSignature,
+                    }) - 1;
+                    functionCallStateByPartIndex.set(partIndex, { key: callKey, blockIndex });
+                    onEvent({
+                        type: 'tool_use',
+                        id: toolId,
+                        name: callName,
+                        input,
+                        thought_signature: thoughtSignature,
+                    });
+                    stopReason = 'tool_use';
+                }
+            }
+
+            if (candidate.finishReason) {
+                if (candidate.finishReason === 'MAX_TOKENS') {
+                    stopReason = 'max_tokens';
+                } else if (stopReason !== 'tool_use') {
+                    stopReason = 'end_turn';
+                }
+            }
+
+            if (payload?.usageMetadata) {
+                inputTokens = payload.usageMetadata.promptTokenCount || inputTokens;
+                outputTokens = payload.usageMetadata.candidatesTokenCount || outputTokens;
+            }
+        };
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -206,53 +383,12 @@ export class AntigravityClient implements AIClient {
             buffer = lines.pop() || '';
 
             for (const line of lines) {
-                if (!line.startsWith('data: ')) continue;
-                const jsonStr = line.slice(6).trim();
-                if (!jsonStr || jsonStr === '[DONE]') continue;
-
-                let chunk: any;
-                try {
-                    chunk = JSON.parse(jsonStr);
-                } catch {
-                    continue;
-                }
-
-                const candidate = chunk.candidates?.[0];
-                if (!candidate) continue;
-
-                const parts: GeminiPart[] = candidate.content?.parts || [];
-                for (const part of parts) {
-                    if (part.text !== undefined) {
-                        accumulatedText += part.text;
-                        onEvent({ type: 'text_delta', text: part.text });
-                    }
-
-                    if (part.functionCall) {
-                        contentBlocks.push({
-                            type: 'tool_use',
-                            id: part.functionCall.name,
-                            name: part.functionCall.name,
-                            input: part.functionCall.args,
-                        });
-                        onEvent({
-                            type: 'tool_use',
-                            id: part.functionCall.name,
-                            name: part.functionCall.name,
-                            input: part.functionCall.args,
-                        });
-                    }
-                }
-
-                if (candidate.finishReason) {
-                    if (candidate.finishReason === 'MAX_TOKENS') stopReason = 'max_tokens';
-                    else stopReason = 'end_turn';
-                }
-
-                if (chunk.usageMetadata) {
-                    inputTokens = chunk.usageMetadata.promptTokenCount || inputTokens;
-                    outputTokens = chunk.usageMetadata.candidatesTokenCount || outputTokens;
-                }
+                processSseLine(line);
             }
+        }
+
+        if (buffer.trim()) {
+            processSseLine(buffer.trim());
         }
 
         if (accumulatedText.length > 0) {
@@ -261,6 +397,7 @@ export class AntigravityClient implements AIClient {
 
         onEvent({ type: 'usage', inputTokens, outputTokens });
         onEvent({ type: 'message_end' });
+        onEvent({ type: 'message_stop', stopReason });
 
         return {
             content: contentBlocks,

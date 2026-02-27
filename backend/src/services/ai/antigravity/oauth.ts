@@ -1,9 +1,16 @@
 import crypto from 'crypto';
 
-export const ANTIGRAVITY_CLIENT_ID = process.env.ANTIGRAVITY_CLIENT_ID || "";
-export const ANTIGRAVITY_CLIENT_SECRET = process.env.ANTIGRAVITY_CLIENT_SECRET || "";
-export const ANTIGRAVITY_REDIRECT_URI = "http://localhost:51121/oauth-callback";
+const DEFAULT_PROJECT_ID = "rising-fact-p41fc";
+
+export const ANTIGRAVITY_CLIENT_ID = process.env.ANTIGRAVITY_CLIENT_ID?.trim() || "";
+export const ANTIGRAVITY_CLIENT_SECRET = process.env.ANTIGRAVITY_CLIENT_SECRET?.trim() || "";
+export const ANTIGRAVITY_REDIRECT_URI = process.env.ANTIGRAVITY_REDIRECT_URI?.trim() || "http://localhost:51121/oauth-callback";
 export const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+export const ANTIGRAVITY_ENDPOINTS = [
+    "https://daily-cloudcode-pa.sandbox.googleapis.com",
+    "https://autopush-cloudcode-pa.sandbox.googleapis.com",
+    "https://cloudcode-pa.googleapis.com",
+];
 
 export const ANTIGRAVITY_SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
@@ -33,7 +40,44 @@ function decodeState(state: string): { verifier: string; projectId: string } {
     return JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
 }
 
+function requireOAuthConfig(): void {
+    if (!ANTIGRAVITY_CLIENT_ID || !ANTIGRAVITY_CLIENT_SECRET) {
+        throw new Error("ANTIGRAVITY_CLIENT_ID / ANTIGRAVITY_CLIENT_SECRET are not configured.");
+    }
+}
+
+async function resolveProjectId(accessToken: string): Promise<string> {
+    const body = JSON.stringify({
+        metadata: {
+            ideType: "IDE_UNSPECIFIED",
+            platform: "PLATFORM_UNSPECIFIED",
+            pluginType: "GEMINI",
+        },
+    });
+
+    for (const endpoint of ANTIGRAVITY_ENDPOINTS) {
+        const response = await fetch(`${endpoint}/v1internal:loadCodeAssist`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+            },
+            body,
+        });
+
+        if (!response.ok) continue;
+        const payload = await response.json() as Record<string, unknown>;
+        const projectId = typeof payload.cloudaicompanionProject === "string"
+            ? payload.cloudaicompanionProject
+            : undefined;
+        if (projectId) return projectId;
+    }
+
+    return DEFAULT_PROJECT_ID;
+}
+
 export async function authorizeAntigravity(projectId = ""): Promise<AntigravityAuthorization> {
+    requireOAuthConfig();
     const pkce = generatePKCE();
 
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -75,6 +119,7 @@ export async function exchangeAntigravity(
     state: string
 ): Promise<AntigravityTokenExchangeResult> {
     try {
+        requireOAuthConfig();
         const { verifier, projectId } = decodeState(state);
 
         const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -107,6 +152,7 @@ export async function exchangeAntigravity(
         );
 
         const userInfo: any = userInfoResponse.ok ? await userInfoResponse.json() : {};
+        const effectiveProjectId = projectId || await resolveProjectId(tokenPayload.access_token);
 
         return {
             type: "success",
@@ -114,7 +160,7 @@ export async function exchangeAntigravity(
             access: tokenPayload.access_token,
             expires: Date.now() + tokenPayload.expires_in * 1000,
             email: userInfo.email,
-            projectId: projectId || "rising-fact-p41fc",
+            projectId: effectiveProjectId || DEFAULT_PROJECT_ID,
         };
     } catch (error) {
         return {
@@ -128,6 +174,8 @@ export async function refreshAccessToken(refreshToken: string): Promise<{
     access_token: string;
     expires_in: number;
 }> {
+    requireOAuthConfig();
+
     const response = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: {

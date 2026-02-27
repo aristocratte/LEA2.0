@@ -1,10 +1,14 @@
 import { PrismaClient, Provider, ProviderType, HealthStatus } from '@prisma/client';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { CryptoService } from './CryptoService.js';
 
 const prisma = new PrismaClient();
 
 interface ProviderWithKey extends Provider {
   decryptedKey?: string;
+  defaultModelId?: string;
 }
 
 interface FallbackConfig {
@@ -21,11 +25,27 @@ const DEFAULT_FALLBACK_CONFIG: FallbackConfig = {
   circuitBreakerResetMs: 60000,
 };
 
+const KIMI_DEFAULT_MODEL_ID = 'kimi-k2.5';
+const KIMI_DEFAULT_BASE_URL = 'https://api.moonshot.ai/v1';
+const KIMI_PROVIDER_ALIASES = new Set(['kimi', 'kimi-k2.5', 'moonshot']);
+const KIMI_PROVIDER_HINTS = ['kimi', 'moonshot', 'litellm'];
+const ZHIPU_PROVIDER_ALIASES = new Set(['zhipu', 'zhipu ai']);
+const ZHIPU_MODEL_ALIASES: Record<string, string> = {
+  'glm-4': 'glm-4',
+  'zai/glm-4': 'glm-4',
+  'glm-4-plus': 'glm-4-plus',
+  'zai/glm-4-plus': 'glm-4-plus',
+  'glm-4.7': 'glm-4.7',
+  'zai/glm-4.7': 'glm-4.7',
+};
+
 // Ordre de fallback par défaut
 const FALLBACK_ORDER: Record<string, string[]> = {
   ANTHROPIC: ['ZHIPU', 'OPENAI'],
   ZHIPU: ['ANTHROPIC', 'OPENAI'],
   OPENAI: ['ANTHROPIC', 'ZHIPU'],
+  GEMINI: ['ANTIGRAVITY', 'ANTHROPIC', 'OPENAI', 'ZHIPU'],
+  ANTIGRAVITY: ['GEMINI', 'ANTHROPIC', 'OPENAI', 'ZHIPU'],
   CUSTOM: ['ANTHROPIC', 'ZHIPU'],
 };
 
@@ -59,14 +79,14 @@ export class ProviderManager {
 
     // 2. Essayer le provider par défaut
     const defaultProvider = await this.getDefaultProvider();
-    if (defaultProvider && this.isHealthy(defaultProvider)) {
+    if (defaultProvider && this.isHealthy(defaultProvider) && this.hasUsableAuth(defaultProvider)) {
       return this.decryptProviderKey(defaultProvider);
     }
 
     // 3. Fallback vers les autres providers
     const fallbackTypes = preferredType
       ? FALLBACK_ORDER[preferredType]
-      : ['ANTHROPIC', 'ZHIPU', 'OPENAI'];
+      : ['ANTHROPIC', 'ZHIPU', 'OPENAI', 'GEMINI', 'ANTIGRAVITY'];
 
     for (const type of fallbackTypes) {
       const provider = await this.getHealthyProvider(type as ProviderType);
@@ -80,23 +100,55 @@ export class ProviderManager {
    * Récupère un provider sain d'un type donné
    */
   private async getHealthyProvider(type: ProviderType): Promise<ProviderWithKey | null> {
+    const where: any = {
+      type,
+      enabled: true,
+      health_status: { in: ['HEALTHY', 'DEGRADED'] },
+    };
+
+    if (type === 'ANTIGRAVITY') {
+      where.oauth_refresh_token = { not: null };
+    } else if (type !== 'GEMINI') {
+      where.api_key_encrypted = { not: null };
+    }
+
     const providers = await prisma.provider.findMany({
-      where: {
-        type,
-        enabled: true,
-        health_status: { in: ['HEALTHY', 'DEGRADED'] },
-        api_key_encrypted: { not: null },
-      },
+      where,
       orderBy: { priority: 'asc' },
     });
 
     for (const provider of providers) {
+      if (!this.hasUsableAuth(provider)) continue;
       if (!this.isCircuitBreakerOpen(provider.id)) {
         return this.decryptProviderKey(provider);
       }
     }
 
     return null;
+  }
+
+  private hasGeminiCliCredentials(): boolean {
+    try {
+      const cred1 = path.join(os.homedir(), '.gemini', 'credentials.json');
+      const cred2 = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+      return fs.existsSync(cred1) || fs.existsSync(cred2);
+    } catch {
+      return false;
+    }
+  }
+
+  private hasUsableAuth(provider: Provider): boolean {
+    if (provider.type === 'GEMINI') {
+      return (
+        Boolean(provider.api_key_encrypted) ||
+        Boolean(provider.oauth_refresh_token || provider.oauth_access_token) ||
+        this.hasGeminiCliCredentials()
+      );
+    }
+    if (provider.type === 'ANTIGRAVITY') {
+      return Boolean(provider.oauth_refresh_token);
+    }
+    return Boolean(provider.api_key_encrypted && provider.api_key_iv && provider.api_key_auth_tag);
   }
 
   /**
@@ -112,18 +164,102 @@ export class ProviderManager {
   }
 
   /**
-   * Récupère un provider par ID (avec clé déchiffrée)
+   * Récupère un provider par ID ou alias (avec clé déchiffrée)
    */
-  async getProvider(providerId: string): Promise<ProviderWithKey | null> {
-    const provider = await prisma.provider.findUnique({
+  async getProvider(providerId: string, modelId?: string): Promise<ProviderWithKey | null> {
+    const providerById = await prisma.provider.findUnique({
       where: { id: providerId },
     });
 
-    if (!provider) {
+    if (providerById) {
+      const decrypted = this.decryptProviderKey(providerById);
+      return this.applyProviderDefaults(decrypted, providerId, modelId);
+    }
+
+    const providerByAlias = await this.resolveProviderByAlias(providerId);
+    if (!providerByAlias) {
       return null;
     }
 
-    return this.decryptProviderKey(provider);
+    const decrypted = this.decryptProviderKey(providerByAlias);
+    return this.applyProviderDefaults(decrypted, providerId, modelId);
+  }
+
+  private normalizeProviderLookup(input: string): string {
+    return String(input || '').trim().toLowerCase();
+  }
+
+  private isKimiLookup(input: string): boolean {
+    return KIMI_PROVIDER_ALIASES.has(this.normalizeProviderLookup(input));
+  }
+
+  private isLikelyKimiProvider(provider: Provider): boolean {
+    if (provider.type !== 'OPENAI' && provider.type !== 'CUSTOM') {
+      return false;
+    }
+
+    const haystack = `${provider.name} ${provider.display_name} ${provider.base_url || ''}`.toLowerCase();
+    return KIMI_PROVIDER_HINTS.some((hint) => haystack.includes(hint));
+  }
+
+  private isZhipuLookup(input: string): boolean {
+    return ZHIPU_PROVIDER_ALIASES.has(this.normalizeProviderLookup(input));
+  }
+
+  private normalizeZhipuModelId(modelId?: string): string | undefined {
+    const normalized = String(modelId || '').trim().toLowerCase();
+    if (!normalized) return undefined;
+    return ZHIPU_MODEL_ALIASES[normalized];
+  }
+
+  private async resolveProviderByAlias(providerLookup: string): Promise<Provider | null> {
+    const normalizedLookup = this.normalizeProviderLookup(providerLookup);
+    if (!normalizedLookup) return null;
+
+    const providerByName = await prisma.provider.findUnique({
+      where: { name: normalizedLookup },
+    });
+    if (providerByName) return providerByName;
+
+    const providers = await prisma.provider.findMany({
+      where: { enabled: true },
+      orderBy: [{ is_default: 'desc' }, { priority: 'asc' }, { created_at: 'asc' }],
+    });
+
+    const byDisplayName = providers.find(
+      (provider) => this.normalizeProviderLookup(provider.display_name) === normalizedLookup
+    );
+    if (byDisplayName) return byDisplayName;
+
+    if (this.isKimiLookup(normalizedLookup)) {
+      return providers.find((provider) => this.isLikelyKimiProvider(provider)) || null;
+    }
+
+    return null;
+  }
+
+  private applyProviderDefaults(
+    provider: ProviderWithKey,
+    lookupKey: string,
+    modelId?: string
+  ): ProviderWithKey {
+    const zhipuModelId = this.normalizeZhipuModelId(modelId);
+    if (zhipuModelId && (provider.type === 'ZHIPU' || this.isZhipuLookup(lookupKey))) {
+      return {
+        ...provider,
+        defaultModelId: zhipuModelId,
+      };
+    }
+
+    if (!this.isKimiLookup(lookupKey) && !this.isLikelyKimiProvider(provider)) {
+      return provider;
+    }
+
+    return {
+      ...provider,
+      base_url: provider.base_url || KIMI_DEFAULT_BASE_URL,
+      defaultModelId: KIMI_DEFAULT_MODEL_ID,
+    };
   }
 
   /**

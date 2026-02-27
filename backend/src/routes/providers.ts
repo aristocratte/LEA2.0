@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { PrismaClient, ProviderType } from '@prisma/client';
+import { PrismaClient, ProviderType, Provider as PrismaProvider } from '@prisma/client';
 import { CryptoService } from '../services/CryptoService.js';
 import { providerManager } from '../services/ProviderManager.js';
 import type { FastifyRequestWithParams, FastifyRequestWithProviderUsageQuery } from '../types/fastify.d.js';
@@ -39,6 +39,20 @@ const UpdateProviderSchema = z.object({
   enabled: z.boolean().optional(),
 });
 
+function toPublicProvider(provider: any): any {
+  const oauthConfigured = !!provider?.oauth_refresh_token;
+
+  return {
+    ...provider,
+    api_key_encrypted: undefined,
+    api_key_iv: undefined,
+    api_key_auth_tag: undefined,
+    oauth_access_token: undefined,
+    oauth_refresh_token: undefined,
+    oauth_configured: oauthConfigured,
+  };
+}
+
 export async function providerRoutes(fastify: FastifyInstance) {
   // ========================================
   // GET /api/providers - List all providers
@@ -52,12 +66,8 @@ export async function providerRoutes(fastify: FastifyInstance) {
       orderBy: [{ priority: 'asc' }, { created_at: 'desc' }],
     });
 
-    // Mask API keys
     return providers.map(p => ({
-      ...p,
-      api_key_encrypted: undefined,
-      api_key_iv: undefined,
-      api_key_auth_tag: undefined,
+      ...toPublicProvider(p),
       api_key_masked: p.api_key_hash ? CryptoService.mask(p.api_key_hash.substring(0, 12)) : null,
     }));
   });
@@ -78,30 +88,49 @@ export async function providerRoutes(fastify: FastifyInstance) {
       // Ignore
     }
 
-    // 2. Check credentials
+    // 2. Check local CLI credentials
     const credPath1 = path.join(os.homedir(), '.gemini', 'credentials.json');
     const credPath2 = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
-    let hasCreds = false;
-    let expiry: string | null = null;
+    let hasFileCreds = false;
+    let fileExpiry: string | null = null;
     try {
       if (fs.existsSync(credPath1)) {
         const creds = JSON.parse(fs.readFileSync(credPath1, 'utf-8'));
-        hasCreds = true;
-        expiry = creds.expiry || null;
+        hasFileCreds = true;
+        fileExpiry = creds.expiry || null;
       } else if (fs.existsSync(credPath2)) {
         const creds = JSON.parse(fs.readFileSync(credPath2, 'utf-8'));
-        hasCreds = true;
-        expiry = creds.expiry_date ? new Date(creds.expiry_date).toISOString() : null;
+        hasFileCreds = true;
+        fileExpiry = creds.expiry_date ? new Date(creds.expiry_date).toISOString() : null;
       }
     } catch {
       // Ignore read errors
     }
 
+    // 3. Check LEA DB-managed OAuth credentials
+    const geminiProvider = await prisma.provider.findFirst({
+      where: {
+        type: 'GEMINI',
+        enabled: true,
+        OR: [
+          { oauth_refresh_token: { not: null } },
+          { oauth_access_token: { not: null } },
+        ],
+      },
+      orderBy: [{ is_default: 'desc' }, { priority: 'asc' }, { updated_at: 'desc' }],
+    });
+
+    const hasDbOAuth = Boolean(geminiProvider?.oauth_refresh_token || geminiProvider?.oauth_access_token);
+    const dbExpiry = geminiProvider?.oauth_expiry ? geminiProvider.oauth_expiry.toISOString() : null;
+
     return {
-      available: !!cliPath || hasCreds, // Consider available if either binary or creds exist
+      available: hasFileCreds || hasDbOAuth,
       path: cliPath,
-      configured: hasCreds,
-      expires_at: expiry,
+      configured: hasFileCreds || hasDbOAuth,
+      source: hasFileCreds ? 'cli' : hasDbOAuth ? 'oauth' : 'none',
+      expires_at: fileExpiry || dbExpiry,
+      cli_credentials_detected: hasFileCreds,
+      db_oauth_configured: hasDbOAuth,
     };
   });
 
@@ -153,12 +182,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
     // Create default models for this provider type
     await createDefaultModels(provider.id, data.type as ProviderType);
 
-    return reply.code(201).send({
-      ...provider,
-      api_key_encrypted: undefined,
-      api_key_iv: undefined,
-      api_key_auth_tag: undefined,
-    });
+    return reply.code(201).send(toPublicProvider(provider));
   });
 
   // ========================================
@@ -195,10 +219,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
     }
 
     return {
-      ...provider,
-      api_key_encrypted: undefined,
-      api_key_iv: undefined,
-      api_key_auth_tag: undefined,
+      ...toPublicProvider(provider),
       api_key_masked: provider.api_key_hash ? CryptoService.mask(provider.api_key_hash.substring(0, 12)) : null,
     };
   });
@@ -258,12 +279,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
       // Create default models
       await createDefaultModels(provider.id, type as ProviderType);
 
-      return reply.code(201).send({
-        ...provider,
-        api_key_encrypted: undefined,
-        api_key_iv: undefined,
-        api_key_auth_tag: undefined,
-      });
+      return reply.code(201).send(toPublicProvider(provider));
     }
 
     // UPDATE: provider exists
@@ -287,12 +303,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
       },
     });
 
-    return {
-      ...provider,
-      api_key_encrypted: undefined,
-      api_key_iv: undefined,
-      api_key_auth_tag: undefined,
-    };
+    return toPublicProvider(provider);
   });
 
   // ========================================
@@ -324,20 +335,36 @@ export async function providerRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: 'Provider not found' });
     }
 
-    if (!provider.api_key_encrypted || !provider.api_key_iv || !provider.api_key_auth_tag) {
-      return reply.code(400).send({ error: 'No API key configured' });
+    const hasEncryptedApiKey = Boolean(
+      provider.api_key_encrypted && provider.api_key_iv && provider.api_key_auth_tag
+    );
+
+    const geminiCliPath1 = path.join(os.homedir(), '.gemini', 'credentials.json');
+    const geminiCliPath2 = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
+    const hasGeminiCliCreds = provider.type === 'GEMINI' && (
+      fs.existsSync(geminiCliPath1) || fs.existsSync(geminiCliPath2)
+    );
+    const hasGeminiOAuth = provider.type === 'GEMINI' && Boolean(
+      provider.oauth_refresh_token || provider.oauth_access_token
+    );
+
+    if (!hasEncryptedApiKey && !(provider.type === 'GEMINI' && (hasGeminiCliCreds || hasGeminiOAuth))) {
+      return reply.code(400).send({ error: 'No API key or OAuth credentials configured' });
     }
 
-    // Decrypt key
-    const apiKey = CryptoService.decrypt(
-      provider.api_key_encrypted,
-      provider.api_key_iv,
-      provider.api_key_auth_tag
-    );
+    // Decrypt key when present
+    let apiKey = '';
+    if (hasEncryptedApiKey) {
+      apiKey = CryptoService.decrypt(
+        provider.api_key_encrypted!,
+        provider.api_key_iv!,
+        provider.api_key_auth_tag!
+      );
+    }
 
     // Test connection
     const startTime = Date.now();
-    const result = await testProviderConnection(provider.type as any, apiKey, provider.base_url);
+    const result = await testProviderConnection(provider.type as any, apiKey, provider.base_url, provider);
     const latency = Date.now() - startTime;
 
     // Update health status
@@ -381,7 +408,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
       data: { is_default: true },
     });
 
-    return updated;
+    return toPublicProvider(updated);
   });
 
   // ========================================
@@ -407,6 +434,79 @@ export async function providerRoutes(fastify: FastifyInstance) {
     });
 
     return models;
+  });
+
+
+  // ========================================
+  // POST /api/providers/oauth/gemini
+  // ========================================
+  fastify.post('/api/providers/oauth/gemini', async (request, reply) => {
+    try {
+      const { startCallbackServer } = await import('../services/ai/antigravity/callback-server.js');
+      const callbackPromise = startCallbackServer();
+
+      const { authorizeGemini, exchangeGemini } = await import('../services/ai/gemini/oauth.js');
+      const authData = await authorizeGemini();
+
+      // Exchange the token in background
+      setTimeout(async () => {
+        try {
+          const { code, state } = await callbackPromise;
+          const exchangeResult = await exchangeGemini(code, state);
+
+          if (exchangeResult.type !== 'success' || !exchangeResult.refresh) {
+            console.error('[Gemini OAuth] Token exchange failed', exchangeResult.error || 'unknown error');
+            return;
+          }
+
+          const existingGeminiProvider = await prisma.provider.findFirst({
+            where: { type: 'GEMINI' },
+            orderBy: [{ is_default: 'desc' }, { priority: 'asc' }, { created_at: 'asc' }],
+          });
+
+          if (existingGeminiProvider) {
+            await prisma.provider.update({
+              where: { id: existingGeminiProvider.id },
+              data: {
+                oauth_access_token: exchangeResult.access,
+                oauth_refresh_token: exchangeResult.refresh,
+                oauth_expiry: exchangeResult.expires ? new Date(exchangeResult.expires) : null,
+                enabled: true,
+                health_status: 'HEALTHY',
+                last_error: null,
+              },
+            });
+          } else {
+            const created = await prisma.provider.create({
+              data: {
+                name: 'gemini-oauth',
+                display_name: `Gemini OAuth${exchangeResult.email ? ` (${exchangeResult.email})` : ''}`,
+                type: 'GEMINI' as ProviderType,
+                oauth_access_token: exchangeResult.access,
+                oauth_refresh_token: exchangeResult.refresh,
+                oauth_expiry: exchangeResult.expires ? new Date(exchangeResult.expires) : null,
+                enabled: true,
+                is_default: false,
+                priority: 1,
+                health_status: 'HEALTHY',
+              },
+            });
+
+            await createDefaultModels(created.id, 'GEMINI' as ProviderType);
+          }
+        } catch (e) {
+          console.error('[Gemini OAuth] Workflow failed', e);
+        }
+      }, 500);
+
+      return reply.code(200).send({
+        url: authData.url,
+        message: 'Please open the URL to authorize Gemini OAuth.',
+      });
+    } catch (error) {
+      console.error(error);
+      return reply.code(500).send({ error: 'Failed to initiate Gemini OAuth flow' });
+    }
   });
 
   // ========================================
@@ -476,7 +576,8 @@ export async function providerRoutes(fastify: FastifyInstance) {
 async function testProviderConnection(
   type: ProviderType,
   apiKey: string,
-  baseUrl?: string | null
+  baseUrl?: string | null,
+  provider?: Pick<PrismaProvider, 'oauth_refresh_token' | 'oauth_access_token'>
 ): Promise<{ success: boolean; error?: string; models?: string[] }> {
   try {
     let endpoint: string;
@@ -519,14 +620,28 @@ async function testProviderConnection(
         break;
 
       case 'GEMINI': {
-        // Check if CLI creds exist or API key was provided
+        // Check if any auth strategy is available: local CLI creds, DB OAuth, or API key
         const geminiCliPath1 = path.join(os.homedir(), '.gemini', 'credentials.json');
         const geminiCliPath2 = path.join(os.homedir(), '.gemini', 'oauth_creds.json');
         const hasCliCreds = fs.existsSync(geminiCliPath1) || fs.existsSync(geminiCliPath2);
-        if (!hasCliCreds && !apiKey) {
-          return { success: false, error: 'No authentication available. Configure Gemini CLI or provide an API key.' };
+        const hasDbOAuth = Boolean(provider?.oauth_refresh_token || provider?.oauth_access_token);
+        if (!hasCliCreds && !hasDbOAuth && !apiKey) {
+          return {
+            success: false,
+            error: 'No authentication available. Configure Gemini OAuth/CLI or provide an API key.',
+          };
         }
-        return { success: true, models: ['gemini-3.1-pro', 'gemini-2.5-pro', 'gemini-2.0-flash'] };
+        return {
+          success: true,
+          models: [
+            'gemini-3-pro-preview',
+            'gemini-3-flash-preview',
+            'gemini-2.5-pro',
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
+            'gemini-2.0-flash',
+          ],
+        };
       }
 
       case 'CUSTOM':
@@ -593,12 +708,12 @@ async function createDefaultModels(providerId: string, type: ProviderType): Prom
       { model_id: 'gpt-4o-mini', display_name: 'GPT-4o Mini', context_window: 128000, max_output_tokens: 4096 },
     ],
     GEMINI: [
-      { model_id: 'gemini-3.1-pro', display_name: 'Gemini 3.1 Pro', context_window: 2000000, max_output_tokens: 8192 },
       { model_id: 'gemini-3-pro-preview', display_name: 'Gemini 3 Pro (Preview)', context_window: 2000000, max_output_tokens: 8192 },
       { model_id: 'gemini-3-flash-preview', display_name: 'Gemini 3 Flash (Preview)', context_window: 2000000, max_output_tokens: 8192 },
       { model_id: 'gemini-2.5-pro', display_name: 'Gemini 2.5 Pro', context_window: 2000000, max_output_tokens: 8192 },
+      { model_id: 'gemini-2.5-flash', display_name: 'Gemini 2.5 Flash', context_window: 1000000, max_output_tokens: 8192 },
+      { model_id: 'gemini-2.5-flash-lite', display_name: 'Gemini 2.5 Flash Lite', context_window: 1000000, max_output_tokens: 8192 },
       { model_id: 'gemini-2.0-flash', display_name: 'Gemini 2.0 Flash', context_window: 1000000, max_output_tokens: 8192 },
-      { model_id: 'gemini-1.5-pro-002', display_name: 'Gemini 1.5 Pro-002', context_window: 2000000, max_output_tokens: 8192 },
     ],
     ANTIGRAVITY: [
       { model_id: 'antigravity-gemini-3-pro', display_name: 'Gemini 3 Pro (Antigravity)', context_window: 1048576, max_output_tokens: 65535 },

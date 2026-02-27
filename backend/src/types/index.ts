@@ -258,8 +258,21 @@ export type SSEEventType =
   | 'scope_review_required'
   | 'scope_review_updated'
   | 'scope_review_applied'
+  | 'context_usage'
   | 'context_compaction_started'
   | 'context_compacted'
+  | 'swarm_connected'
+  | 'swarm_started'
+  | 'agent_spawned'
+  | 'agent_status'
+  | 'finding_created'
+  | 'finding_updated'
+  | 'swarm_paused'
+  | 'swarm_resumed'
+  | 'swarm_merged'
+  | 'swarm_completed'
+  | 'swarm_failed'
+  | 'tool_approval_required'
   | 'error';
 
 export interface SSEEvent {
@@ -277,3 +290,23 @@ export type ReportStatus = 'DRAFT' | 'COMPLETE' | 'ARCHIVED';
 export type ExportFormat = 'PDF' | 'HTML' | 'JSON' | 'DOCX';
 
 export type JobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export type {
+  SwarmRunStatus,
+  SwarmAgentStatus,
+  SwarmSeverity,
+  SwarmStreamEventType,
+  SwarmStreamEventMap,
+  SwarmStreamMessage,
+  Agent,
+  SwarmAgent,
+  SysReptorFinding,
+  SysReptorFindingPayload,
+  SwarmFinding,
+  Swarm,
+  SwarmRun,
+  StartSwarmAuditRequest,
+  StartSwarmParams,
+  StartSwarmAuditResponse,
+  StartSwarmResponse,
+} from './swarm.js';

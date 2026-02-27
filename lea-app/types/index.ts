@@ -262,6 +262,7 @@ export interface ApiProvider {
   updated_at: string;
   last_used_at?: string;
   api_key_hash?: string;
+  oauth_configured?: boolean;
   models?: ApiModelConfig[];
 }
 
@@ -474,6 +475,44 @@ export interface ContextRecallResult {
   snippets: ContextRecallSnippet[];
 }
 
+export type {
+  SwarmRunStatus,
+  SwarmAgentStatus,
+  SwarmSeverity,
+  SwarmStreamEventType,
+  SwarmStreamEventMap,
+  SwarmStreamMessage,
+  SwarmAgent,
+  SwarmFinding,
+  SwarmRun,
+  Agent,
+  SysReptorFinding,
+  Swarm,
+  SysReptorFindingPayload,
+  StartSwarmAuditRequest,
+  StartSwarmParams,
+  StartSwarmResponse,
+} from '../src/types/swarm';
+
+export interface ContextUsage {
+  modelId: string;
+  phase?: string;
+  reason?: 'pre_llm' | 'post_turn' | 'session_complete' | string;
+  contextWindowTokens: number;
+  staticContextTokens: number;
+  estimatedConversationTokens: number;
+  estimatedContextTokens: number;
+  estimatedUsagePct: number;
+  warnThresholdTokens: number;
+  urgentThresholdTokens: number;
+  hardThresholdTokens: number;
+  remainingBeforeCompactionTokens: number;
+  remainingInWindowTokens: number;
+  compactionThresholdPct: number;
+  totalSessionTokens: number;
+  timestamp?: number;
+}
+
 // ============================================
 // Backend API Report Types (snake_case)
 // ============================================
@@ -589,6 +628,7 @@ export interface SSEEvent {
   | 'preflight_complete'
   | 'phase_change'
   | 'status_change'
+  | 'context_usage'
   | 'thinking_delta'
   | 'message_delta'
   | 'tool_start'
@@ -603,7 +643,21 @@ export interface SSEEvent {
   | 'scope_review_required'
   | 'scope_review_updated'
   | 'scope_review_applied'
-  | 'findings_agent_status';
+  | 'context_compaction_started'
+  | 'context_compacted'
+  | 'findings_agent_status'
+  | 'swarm_connected'
+  | 'swarm_started'
+  | 'agent_spawned'
+  | 'agent_status'
+  | 'finding_created'
+  | 'finding_updated'
+  | 'swarm_paused'
+  | 'swarm_resumed'
+  | 'swarm_merged'
+  | 'swarm_completed'
+  | 'swarm_failed'
+  | 'tool_approval_required';
   data: Record<string, unknown> | unknown;
 }
 
@@ -664,4 +718,9 @@ export interface SSEFindingsAgentStatusEvent extends SSEEvent {
     message?: string;
     timestamp?: number;
   };
+}
+
+export interface SSEContextUsageEvent extends SSEEvent {
+  type: 'context_usage';
+  data: ContextUsage;
 }

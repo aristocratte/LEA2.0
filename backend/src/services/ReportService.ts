@@ -22,13 +22,18 @@ interface ReportStats {
   maxSeverity: string | null;
 }
 
+
+interface CreateReportOptions {
+  source?: 'classic' | 'swarm';
+}
+
 export class ReportService {
 
   /**
    * CRÉE AUTOMATIQUEMENT UN REPORT À LA FIN DU PENTEST
    * Appelé par completePentest() dans l'orchestrateur
    */
-  async createReportFromPentest(pentestId: string) {
+  async createReportFromPentest(pentestId: string, options: CreateReportOptions = {}) {
     // 1. Récupérer le pentest avec findings
     const pentest = await prisma.pentest.findUnique({
       where: { id: pentestId },
@@ -59,7 +64,7 @@ export class ReportService {
     const stats = this.calculateStats(pentest.findings);
 
     // 4. Générer le résumé exécutif
-    const executiveSummary = await this.generateExecutiveSummary(pentest, stats);
+    const executiveSummary = await this.generateExecutiveSummary(pentest, stats, options.source || 'classic');
 
     // 5. Créer le report
     const report = await prisma.report.create({
@@ -70,7 +75,7 @@ export class ReportService {
         methodology: this.getDefaultMethodology(),
         scope_description: JSON.stringify(pentest.scope, null, 2),
         status: 'COMPLETE',
-        stats: stats as any,
+        stats: { ...stats, source: options.source || 'classic' } as any,
         completed_at: new Date(),
         findings: {
           connect: pentest.findings.map(f => ({ id: f.id })),
@@ -132,15 +137,17 @@ export class ReportService {
   /**
    * GÉNÈRE UN RÉSUMÉ EXÉCUTIF
    */
-  private async generateExecutiveSummary(pentest: any, stats: ReportStats): Promise<string> {
+  private async generateExecutiveSummary(pentest: any, stats: ReportStats, source: 'classic' | 'swarm'): Promise<string> {
     // Si pas de findings, retourner un message simple
     if (pentest.findings.length === 0) {
-      return `A security assessment was performed on ${pentest.target}. No significant vulnerabilities were identified during this assessment.`;
+      return source === 'swarm'
+        ? `A swarm-based security assessment was performed on ${pentest.target}. No significant vulnerabilities were identified during this run.`
+        : `A security assessment was performed on ${pentest.target}. No significant vulnerabilities were identified during this assessment.`;
     }
 
     // Sinon, générer un résumé template
     return `
-A penetration test was conducted on ${pentest.target} to identify security vulnerabilities.
+${source === 'swarm' ? 'A multi-agent swarm security assessment' : 'A penetration test'} was conducted on ${pentest.target} to identify security vulnerabilities.
 
 ## Key Findings
 

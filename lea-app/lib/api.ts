@@ -13,6 +13,9 @@ import type {
   PreflightState,
   ScopeDecisionAction,
   ScopeProposal,
+  StartSwarmAuditRequest,
+  StartSwarmResponse,
+  SwarmRun,
 } from '@/types';
 
 type QueryValue = string | number | boolean | null | undefined;
@@ -181,6 +184,19 @@ export function getStreamUrl(pentestId: string, lastEventId?: number): string {
   );
 }
 
+export function getSwarmStreamUrl(pentestId: string, lastEventId?: number): string {
+  const query: QueryParams = {};
+  if (typeof lastEventId === 'number' && Number.isFinite(lastEventId) && lastEventId > 0) {
+    query.lastEventId = Math.floor(lastEventId);
+  }
+
+  return buildUrl(
+    `/api/pentests/${encodeURIComponent(pentestId)}/swarm/stream`,
+    query,
+    resolveStreamBase()
+  );
+}
+
 export const pentestsApi = {
   list(params?: { status?: string; limit?: number; offset?: number }) {
     return requestJson<ApiEnvelope<ApiPentest[]>>('/api/pentests', { query: params });
@@ -239,6 +255,49 @@ export const pentestsApi = {
       thinkingBudget?: number;
       fallbackApplied?: boolean;
     }>>(`/api/pentests/${encodeURIComponent(pentestId)}/start`, { method: 'POST' });
+  },
+
+  startSwarm(
+    pentestId: string,
+    payload?: StartSwarmAuditRequest
+  ) {
+    return requestJson<ApiEnvelope<StartSwarmResponse>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/start`,
+      { method: 'POST', body: payload || {} }
+    );
+  },
+
+  getSwarmState(pentestId: string) {
+    return requestJson<ApiEnvelope<SwarmRun>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/state`
+    );
+  },
+
+  getSwarmHistory(pentestId: string) {
+    return requestJson<ApiEnvelope<SwarmRun[]>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/history`
+    );
+  },
+
+  pauseSwarm(pentestId: string) {
+    return requestJson<ApiEnvelope<SwarmRun>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/pause`,
+      { method: 'POST' }
+    );
+  },
+
+  resumeSwarm(pentestId: string) {
+    return requestJson<ApiEnvelope<SwarmRun>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/resume`,
+      { method: 'POST' }
+    );
+  },
+
+  forceMergeSwarm(pentestId: string) {
+    return requestJson<ApiEnvelope<SwarmRun>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/force-merge`,
+      { method: 'POST' }
+    );
   },
 
   pause(pentestId: string) {

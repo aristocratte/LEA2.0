@@ -9,6 +9,7 @@ import { pentestRoutes } from './routes/pentests.js';
 import { streamRoutes } from './routes/stream.js';
 import { reportRoutes } from './routes/reports.js';
 import { providerRoutes } from './routes/providers.js';
+import { swarmRoutes } from './routes/swarm.js';
 
 const fastify = Fastify({
   logger: true,
@@ -40,9 +41,15 @@ await fastify.register(pentestRoutes);
 await fastify.register(streamRoutes);
 await fastify.register(reportRoutes);
 await fastify.register(providerRoutes);
+await fastify.register(swarmRoutes);
 
 // Health check
 fastify.get('/health', async (request, reply) => {
+  return { status: 'ok', timestamp: new Date().toISOString() };
+});
+
+// Compatibility health check (frontend proxy expects /api/health)
+fastify.get('/api/health', async (request, reply) => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
 
