@@ -9,11 +9,12 @@ import { providerManager } from '../services/ProviderManager.js';
 import type { FastifyRequestWithParams, FastifyRequestWithProviderUsageQuery } from '../types/fastify.d.js';
 
 const prisma = new PrismaClient();
+const ProviderTypeSchema = z.enum(['ANTHROPIC', 'ZHIPU', 'OPENAI', 'CUSTOM', 'GEMINI', 'ANTIGRAVITY', 'CODEX', 'OPENCODE']);
 
 // Validation schemas
 const CreateProviderSchema = z.object({
   name: z.string().min(1).max(100),
-  type: z.enum(['ANTHROPIC', 'ZHIPU', 'OPENAI', 'CUSTOM', 'GEMINI', 'ANTIGRAVITY']),
+  type: ProviderTypeSchema,
   display_name: z.string().min(1).max(200),
   api_key: z.string().min(1).optional(),
   base_url: z.string().url().optional().or(z.literal('')).transform(v => v || undefined),
@@ -29,9 +30,9 @@ const CreateProviderSchema = z.object({
 
 const UpdateProviderSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  type: z.enum(['ANTHROPIC', 'ZHIPU', 'OPENAI', 'CUSTOM', 'GEMINI', 'ANTIGRAVITY']).optional(),
+  type: ProviderTypeSchema.optional(),
   display_name: z.string().min(1).max(200).optional(),
-  api_key: z.string().min(1).optional(),
+  api_key: z.string().min(1).optional().or(z.literal('').transform(() => undefined)),
   base_url: z.string().url().optional().or(z.literal('')).transform(v => v || undefined),
   organization_id: z.string().optional(),
   is_default: z.boolean().optional(),
@@ -40,7 +41,8 @@ const UpdateProviderSchema = z.object({
 });
 
 function toPublicProvider(provider: any): any {
-  const oauthConfigured = !!provider?.oauth_refresh_token;
+  // oauth_configured = true if any OAuth tokens are present
+  const oauthConfigured = !!(provider?.oauth_refresh_token || provider?.oauth_access_token);
 
   return {
     ...provider,
@@ -142,11 +144,11 @@ export async function providerRoutes(fastify: FastifyInstance) {
 
     // Encrypt API key if provided
     let apiKeyData: {
-      api_key_encrypted: string;
-      api_key_iv: string;
-      api_key_auth_tag: string;
-      api_key_hash: string;
-    } | {} = {};
+      api_key_encrypted?: string;
+      api_key_iv?: string;
+      api_key_auth_tag?: string;
+      api_key_hash?: string;
+    } = {};
     if (data.api_key) {
       const encrypted = CryptoService.encrypt(data.api_key);
       apiKeyData = {
@@ -160,7 +162,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
     // If is_default, unset others of same type
     if (data.is_default) {
       await prisma.provider.updateMany({
-        where: { type: data.type as any },
+        where: { type: data.type },
         data: { is_default: false },
       });
     }
@@ -168,7 +170,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
     const provider = await prisma.provider.create({
       data: {
         name: data.name,
-        type: data.type as any,
+        type: data.type,
         display_name: data.display_name,
         base_url: data.base_url,
         is_default: data.is_default,
@@ -176,7 +178,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
         enabled: data.enabled,
         health_status: 'UNKNOWN',
         ...apiKeyData,
-      } as any,
+      },
     });
 
     // Create default models for this provider type
@@ -257,15 +259,15 @@ export async function providerRoutes(fastify: FastifyInstance) {
     if (!existing) {
       // CREATE: provider doesn't exist yet, create it
       const providerType = data.type || id.toUpperCase();
-      const validTypes = ['ANTHROPIC', 'ZHIPU', 'OPENAI', 'CUSTOM', 'GEMINI', 'ANTIGRAVITY'];
-      const type = validTypes.includes(providerType) ? providerType : 'CUSTOM';
+      const parsedType = ProviderTypeSchema.safeParse(providerType);
+      const type: ProviderType = parsedType.success ? parsedType.data : 'CUSTOM';
       const name = data.name || id;
       const displayName = data.display_name || name.charAt(0).toUpperCase() + name.slice(1);
 
       const provider = await prisma.provider.create({
         data: {
           name,
-          type: type as any,
+          type,
           display_name: displayName,
           base_url: data.base_url || null,
           is_default: data.is_default ?? false,
@@ -273,7 +275,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
           enabled: data.enabled ?? true,
           health_status: 'UNKNOWN',
           ...apiKeyData,
-        } as any,
+        },
       });
 
       // Create default models
@@ -347,8 +349,19 @@ export async function providerRoutes(fastify: FastifyInstance) {
     const hasGeminiOAuth = provider.type === 'GEMINI' && Boolean(
       provider.oauth_refresh_token || provider.oauth_access_token
     );
+    const hasAnthropicOAuth = provider.type === 'ANTHROPIC' && Boolean(
+      provider.oauth_access_token
+    );
+    const hasAntigravityOAuth = provider.type === 'ANTIGRAVITY' && Boolean(
+      provider.oauth_refresh_token || provider.oauth_access_token
+    );
 
-    if (!hasEncryptedApiKey && !(provider.type === 'GEMINI' && (hasGeminiCliCreds || hasGeminiOAuth))) {
+    const hasAnyAuth = hasEncryptedApiKey
+      || (provider.type === 'GEMINI' && (hasGeminiCliCreds || hasGeminiOAuth))
+      || hasAnthropicOAuth
+      || hasAntigravityOAuth;
+
+    if (!hasAnyAuth) {
       return reply.code(400).send({ error: 'No API key or OAuth credentials configured' });
     }
 
@@ -364,7 +377,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
 
     // Test connection
     const startTime = Date.now();
-    const result = await testProviderConnection(provider.type as any, apiKey, provider.base_url, provider);
+    const result = await testProviderConnection(provider.type, apiKey, provider.base_url, provider);
     const latency = Date.now() - startTime;
 
     // Update health status
@@ -436,6 +449,44 @@ export async function providerRoutes(fastify: FastifyInstance) {
     return models;
   });
 
+  // ========================================
+  // POST /api/providers/:id/models - Add a model
+  // ========================================
+  fastify.post('/api/providers/:id/models', async (request, reply) => {
+    const { id } = request.params as FastifyRequestWithParams['params'];
+    const body = request.body as { model_id: string; context_window?: number; enabled?: boolean };
+
+    if (!body.model_id?.trim()) {
+      return reply.code(400).send({ error: 'model_id is required' });
+    }
+
+    // Verify provider exists (by id or name)
+    let provider = await prisma.provider.findUnique({ where: { id } });
+    if (!provider) {
+      provider = await prisma.provider.findUnique({ where: { name: id } });
+    }
+    if (!provider) {
+      return reply.code(404).send({ error: 'Provider not found' });
+    }
+
+    const model = await prisma.modelConfig.create({
+      data: {
+        provider_id: provider.id,
+        model_id: body.model_id.trim(),
+        display_name: body.model_id.trim(),
+        enabled: body.enabled ?? true,
+        context_window: body.context_window || 128000,
+        max_output_tokens: 4096,
+        input_price_per_1k: 0,
+        output_price_per_1k: 0,
+      },
+    });
+
+    return reply.code(201).send({ data: model });
+  });
+
+  // NOTE: Anthropic OAuth (Claude Code tokens) is blocked for 3rd-party apps since Feb 2026.
+  // Use a console API key from console.anthropic.com/settings/keys instead.
 
   // ========================================
   // POST /api/providers/oauth/gemini
@@ -577,7 +628,7 @@ async function testProviderConnection(
   type: ProviderType,
   apiKey: string,
   baseUrl?: string | null,
-  provider?: Pick<PrismaProvider, 'oauth_refresh_token' | 'oauth_access_token'>
+  provider?: Pick<PrismaProvider, 'oauth_refresh_token' | 'oauth_access_token' | 'type'>
 ): Promise<{ success: boolean; error?: string; models?: string[] }> {
   try {
     let endpoint: string;
@@ -585,19 +636,26 @@ async function testProviderConnection(
     let body: string | undefined;
 
     switch (type) {
-      case 'ANTHROPIC':
+      case 'ANTHROPIC': {
+        // Support both API key and OAuth Bearer token
+        const anthropicAuth = provider?.oauth_access_token
+          ? `Bearer ${provider.oauth_access_token}`
+          : null;
         endpoint = 'https://api.anthropic.com/v1/messages';
         headers = {
-          'x-api-key': apiKey,
+          ...(anthropicAuth
+            ? { authorization: anthropicAuth }
+            : { 'x-api-key': apiKey }),
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         };
         body = JSON.stringify({
-          model: 'claude-3-haiku-20240307',
+          model: 'claude-haiku-4-5-20251001',
           max_tokens: 10,
           messages: [{ role: 'user', content: 'Hi' }],
         });
         break;
+      }
 
       case 'OPENAI':
         endpoint = 'https://api.openai.com/v1/models';
@@ -642,6 +700,21 @@ async function testProviderConnection(
             'gemini-2.0-flash',
           ],
         };
+      }
+
+      case 'CODEX':
+        endpoint = 'https://api.openai.com/v1/models';
+        headers = {
+          'authorization': `Bearer ${apiKey}`,
+        };
+        break;
+
+      case 'OPENCODE': {
+        endpoint = (baseUrl || 'https://api.opencode.ai/v1') + '/models';
+        headers = {
+          'authorization': `Bearer ${apiKey}`,
+        };
+        break;
       }
 
       case 'CUSTOM':
@@ -689,37 +762,48 @@ async function createDefaultModels(providerId: string, type: ProviderType): Prom
     display_name: string;
     context_window: number;
     max_output_tokens: number;
+    input_price_per_1k: number;
+    output_price_per_1k: number;
   }>> = {
     ANTHROPIC: [
-      { model_id: 'claude-opus-4', display_name: 'Claude Opus 4', context_window: 200000, max_output_tokens: 4096 },
-      { model_id: 'claude-sonnet-4', display_name: 'Claude Sonnet 4', context_window: 200000, max_output_tokens: 4096 },
-      { model_id: 'claude-haiku-3.5', display_name: 'Claude Haiku 3.5', context_window: 200000, max_output_tokens: 4096 },
+      { model_id: 'claude-opus-4-6', display_name: 'Claude Opus 4.6', context_window: 200000, max_output_tokens: 32000, input_price_per_1k: 0.015, output_price_per_1k: 0.075 },
+      { model_id: 'claude-sonnet-4-5-20250929', display_name: 'Claude Sonnet 4.5', context_window: 200000, max_output_tokens: 16000, input_price_per_1k: 0.003, output_price_per_1k: 0.015 },
+      { model_id: 'claude-sonnet-4-6', display_name: 'Claude Sonnet 4.6', context_window: 200000, max_output_tokens: 16000, input_price_per_1k: 0.003, output_price_per_1k: 0.015 },
+      { model_id: 'claude-haiku-4-5-20251001', display_name: 'Claude Haiku 4.5', context_window: 200000, max_output_tokens: 8192, input_price_per_1k: 0.0008, output_price_per_1k: 0.004 },
     ],
     ZHIPU: [
-      { model_id: 'glm-5', display_name: 'GLM-5', context_window: 1000000, max_output_tokens: 4096 },
-      { model_id: 'glm-4.7', display_name: 'GLM-4.7', context_window: 200000, max_output_tokens: 4096 },
-      { model_id: 'glm-4.7-flash', display_name: 'GLM-4.7 Flash', context_window: 200000, max_output_tokens: 4096 },
-      { model_id: 'glm-4-plus', display_name: 'GLM-4 Plus', context_window: 128000, max_output_tokens: 4096 },
-      { model_id: 'glm-4-flash', display_name: 'GLM-4 Flash', context_window: 128000, max_output_tokens: 4096 },
+      { model_id: 'glm-4.7', display_name: 'GLM-4.7 (flagship, thinking)', context_window: 200000, max_output_tokens: 8192, input_price_per_1k: 0.0005, output_price_per_1k: 0.0015 },
+      { model_id: 'glm-5', display_name: 'GLM-5 (agents/coding)', context_window: 128000, max_output_tokens: 8192, input_price_per_1k: 0.0008, output_price_per_1k: 0.002 },
+      { model_id: 'glm-4-plus', display_name: 'GLM-4 Plus', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0.0007, output_price_per_1k: 0.002 },
+      { model_id: 'glm-4-air', display_name: 'GLM-4 Air (fast)', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0.0001, output_price_per_1k: 0.0003 },
+      { model_id: 'glm-4-flash', display_name: 'GLM-4 Flash (free tier)', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0, output_price_per_1k: 0 },
     ],
     OPENAI: [
-      { model_id: 'gpt-4o', display_name: 'GPT-4o', context_window: 128000, max_output_tokens: 4096 },
-      { model_id: 'gpt-4-turbo', display_name: 'GPT-4 Turbo', context_window: 128000, max_output_tokens: 4096 },
-      { model_id: 'gpt-4o-mini', display_name: 'GPT-4o Mini', context_window: 128000, max_output_tokens: 4096 },
+      { model_id: 'gpt-4o', display_name: 'GPT-4o', context_window: 128000, max_output_tokens: 16384, input_price_per_1k: 0.0025, output_price_per_1k: 0.01 },
+      { model_id: 'gpt-4o-mini', display_name: 'GPT-4o Mini', context_window: 128000, max_output_tokens: 16384, input_price_per_1k: 0.00015, output_price_per_1k: 0.0006 },
+      { model_id: 'o3', display_name: 'o3 (reasoning)', context_window: 200000, max_output_tokens: 100000, input_price_per_1k: 0.01, output_price_per_1k: 0.04 },
+      { model_id: 'o4-mini', display_name: 'o4-mini (reasoning)', context_window: 200000, max_output_tokens: 100000, input_price_per_1k: 0.0011, output_price_per_1k: 0.0044 },
     ],
     GEMINI: [
-      { model_id: 'gemini-3-pro-preview', display_name: 'Gemini 3 Pro (Preview)', context_window: 2000000, max_output_tokens: 8192 },
-      { model_id: 'gemini-3-flash-preview', display_name: 'Gemini 3 Flash (Preview)', context_window: 2000000, max_output_tokens: 8192 },
-      { model_id: 'gemini-2.5-pro', display_name: 'Gemini 2.5 Pro', context_window: 2000000, max_output_tokens: 8192 },
-      { model_id: 'gemini-2.5-flash', display_name: 'Gemini 2.5 Flash', context_window: 1000000, max_output_tokens: 8192 },
-      { model_id: 'gemini-2.5-flash-lite', display_name: 'Gemini 2.5 Flash Lite', context_window: 1000000, max_output_tokens: 8192 },
-      { model_id: 'gemini-2.0-flash', display_name: 'Gemini 2.0 Flash', context_window: 1000000, max_output_tokens: 8192 },
+      { model_id: 'gemini-2.5-pro', display_name: 'Gemini 2.5 Pro', context_window: 1048576, max_output_tokens: 65536, input_price_per_1k: 0.00125, output_price_per_1k: 0.01 },
+      { model_id: 'gemini-2.5-flash', display_name: 'Gemini 2.5 Flash', context_window: 1048576, max_output_tokens: 65536, input_price_per_1k: 0.0001, output_price_per_1k: 0.0004 },
+      { model_id: 'gemini-2.5-flash-lite', display_name: 'Gemini 2.5 Flash Lite', context_window: 1048576, max_output_tokens: 32768, input_price_per_1k: 0.000075, output_price_per_1k: 0.0003 },
+      { model_id: 'gemini-2.0-flash', display_name: 'Gemini 2.0 Flash', context_window: 1048576, max_output_tokens: 8192, input_price_per_1k: 0.0001, output_price_per_1k: 0.0004 },
     ],
     ANTIGRAVITY: [
-      { model_id: 'antigravity-gemini-3-pro', display_name: 'Gemini 3 Pro (Antigravity)', context_window: 1048576, max_output_tokens: 65535 },
-      { model_id: 'antigravity-gemini-3-flash', display_name: 'Gemini 3 Flash (Antigravity)', context_window: 1048576, max_output_tokens: 65535 },
-      { model_id: 'antigravity-claude-opus-4-6-thinking', display_name: 'Claude Opus 4.6 (Antigravity)', context_window: 200000, max_output_tokens: 64000 },
-      { model_id: 'antigravity-claude-sonnet-4-6', display_name: 'Claude Sonnet 4.6 (Antigravity)', context_window: 200000, max_output_tokens: 64000 },
+      { model_id: 'antigravity-gemini-3-pro', display_name: 'Gemini 3 Pro (Antigravity)', context_window: 1048576, max_output_tokens: 65535, input_price_per_1k: 0, output_price_per_1k: 0 },
+      { model_id: 'antigravity-gemini-3-flash', display_name: 'Gemini 3 Flash (Antigravity)', context_window: 1048576, max_output_tokens: 65535, input_price_per_1k: 0, output_price_per_1k: 0 },
+      { model_id: 'antigravity-claude-opus-4-6-thinking', display_name: 'Claude Opus 4.6 (Antigravity)', context_window: 200000, max_output_tokens: 64000, input_price_per_1k: 0, output_price_per_1k: 0 },
+      { model_id: 'antigravity-claude-sonnet-4-6', display_name: 'Claude Sonnet 4.6 (Antigravity)', context_window: 200000, max_output_tokens: 64000, input_price_per_1k: 0, output_price_per_1k: 0 },
+    ],
+    CODEX: [
+      { model_id: 'codex-latest', display_name: 'Codex Latest', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0.003, output_price_per_1k: 0.012 },
+      { model_id: 'codex-mini-latest', display_name: 'Codex Mini Latest', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0.0015, output_price_per_1k: 0.006 },
+    ],
+    OPENCODE: [
+      { model_id: 'opencode-go', display_name: 'OpenCode Go', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0, output_price_per_1k: 0 },
+      { model_id: 'opencode-glm-5', display_name: 'OpenCode GLM-5', context_window: 1000000, max_output_tokens: 4096, input_price_per_1k: 0, output_price_per_1k: 0 },
+      { model_id: 'opencode-kimi', display_name: 'OpenCode Kimi', context_window: 200000, max_output_tokens: 4096, input_price_per_1k: 0, output_price_per_1k: 0 },
     ],
     CUSTOM: [],
   };
@@ -734,8 +818,8 @@ async function createDefaultModels(providerId: string, type: ProviderType): Prom
         display_name: model.display_name,
         context_window: model.context_window,
         max_output_tokens: model.max_output_tokens,
-        input_price_per_1k: 0,
-        output_price_per_1k: 0,
+        input_price_per_1k: model.input_price_per_1k,
+        output_price_per_1k: model.output_price_per_1k,
       },
     });
   }

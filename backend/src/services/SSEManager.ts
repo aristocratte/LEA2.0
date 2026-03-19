@@ -4,17 +4,13 @@
  * Gère les connexions SSE pour le streaming temps réel des pentests
  */
 
+import type { SwarmEventEnvelope, SwarmEventPayload } from '../types/events.js';
+import type { SwarmTraceRecorder } from '../runtime/swarm/SwarmTraceRecorder.js';
+
 interface SSEClient {
   id: string;
-  send: (event: string, data: any, eventId?: number) => void;
+  send: (event: string, data: any, eventId?: string) => void;
   connectedAt: Date;
-}
-
-interface SSEEvent {
-  id: number;
-  type: string;
-  data: any;
-  timestamp: number;
 }
 
 export class SSEManager {
@@ -23,25 +19,28 @@ export class SSEManager {
   private eventSequenceByPentest: Map<string, number> = new Map();
 
   // Event queue for reconnection (last N events per pentest, max 5 minutes old)
-  private eventQueue: Map<string, SSEEvent[]> = new Map();
+  private eventQueue: Map<string, SwarmEventEnvelope<SwarmEventPayload>[]> = new Map();
 
   // Queue TTL: 5 minutes (events older than this are not sent to reconnecting clients)
   private readonly QUEUE_TTL = 5 * 60 * 1000;
   private readonly MAX_QUEUE_SIZE = 1000;
+  private traceRecorder: SwarmTraceRecorder | null = null;
+
+  setTraceRecorder(recorder: SwarmTraceRecorder): void {
+    this.traceRecorder = recorder;
+  }
 
   /**
    * Register a new SSE client for a pentest
    */
-  register(pentestId: string, client: SSEClient, options?: { lastEventId?: number }): string {
+  register(pentestId: string, client: SSEClient, options?: { lastEventId?: string }): string {
     if (!this.clients.has(pentestId)) {
       this.clients.set(pentestId, new Map());
     }
 
     this.clients.get(pentestId)!.set(client.id, client);
 
-    const lastEventId = Number.isFinite(options?.lastEventId)
-      ? Number(options?.lastEventId)
-      : undefined;
+    const lastSequence = this.parseLastEventSequence(options?.lastEventId);
 
     // Send queued events for reconnection (only recent events within TTL)
     const queue = this.eventQueue.get(pentestId) || [];
@@ -53,11 +52,11 @@ export class SSEManager {
         return;
       }
       // If client provides Last-Event-ID, replay only missing events.
-      if (typeof lastEventId === 'number' && event.id <= lastEventId) {
+      if (typeof lastSequence === 'number' && event.sequence <= lastSequence) {
         return;
       }
       try {
-        client.send(event.type, event.data, event.id);
+        client.send(event.eventType, event, event.id);
         sentCount++;
       } catch (error) {
         console.error(`[SSE] Error replaying event ${event.id} to client ${client.id}:`, error);
@@ -65,7 +64,7 @@ export class SSEManager {
     });
 
     if (sentCount > 0) {
-      console.log(`[SSE] Sent ${sentCount} cached events to client ${client.id} (lastEventId=${lastEventId ?? 'none'})`);
+      console.log(`[SSE] Sent ${sentCount} cached events to client ${client.id} (lastSequence=${lastSequence ?? 'none'})`);
     }
 
     console.log(`[SSE] ✓ Client ${client.id} registered for pentest ${pentestId}`);
@@ -89,14 +88,17 @@ export class SSEManager {
   }
 
   /**
-   * Emit an event to all clients of a pentest
+   * Emit a strongly typed SwarmEvent
    */
-  emit(pentestId: string, event: Omit<SSEEvent, 'id'> & Partial<Pick<SSEEvent, 'id'>>): SSEEvent {
-    const normalizedEvent: SSEEvent = {
-      id: typeof event.id === 'number' ? event.id : this.nextEventId(pentestId),
-      type: event.type,
-      data: event.data,
-      timestamp: event.timestamp,
+  emit<T extends SwarmEventPayload>(pentestId: string, envelopeInfo: Omit<SwarmEventEnvelope<T>, 'sequence' | 'timestamp' | 'id'> & Partial<Pick<SwarmEventEnvelope<T>, 'id'>>): SwarmEventEnvelope<T> {
+    const sequence = this.nextSequence(pentestId);
+    const eventId = envelopeInfo.id || `evt-${sequence}-${Date.now()}`;
+
+    const event: SwarmEventEnvelope<T> = {
+      ...envelopeInfo,
+      id: eventId,
+      sequence,
+      timestamp: Date.now(),
     };
 
     // Queue event (keep last MAX_QUEUE_SIZE events)
@@ -104,7 +106,7 @@ export class SSEManager {
       this.eventQueue.set(pentestId, []);
     }
     const queue = this.eventQueue.get(pentestId)!;
-    queue.push(normalizedEvent);
+    queue.push(event as SwarmEventEnvelope<SwarmEventPayload>);
 
     // Remove old events beyond max size
     if (queue.length > this.MAX_QUEUE_SIZE) {
@@ -122,34 +124,57 @@ export class SSEManager {
     if (clients) {
       clients.forEach(client => {
         try {
-          client.send(normalizedEvent.type, normalizedEvent.data, normalizedEvent.id);
+          client.send(event.eventType, event, event.id);
         } catch (error) {
           console.error(`[SSE] Error sending to client ${client.id}:`, error);
         }
       });
     }
 
-    return normalizedEvent;
+    this.traceRecorder?.recordEnvelope(pentestId, event as SwarmEventEnvelope<SwarmEventPayload>);
+
+    return event;
   }
 
   /**
-   * Broadcast an event (convenience method)
+   * Broadcast an event dynamically
    */
-  broadcast(pentestId: string, event: { type: string; data: any }): SSEEvent {
-    return this.emit(pentestId, {
-      ...event,
-      timestamp: Date.now(),
-    });
+  broadcast<T extends SwarmEventPayload>(pentestId: string, envelopeInfo: Omit<SwarmEventEnvelope<T>, 'sequence' | 'timestamp' | 'id'>): SwarmEventEnvelope<T> {
+    return this.emit(pentestId, envelopeInfo);
   }
 
-  getLatestEventId(pentestId: string): number {
+  getLatestSequence(pentestId: string): number {
     return this.eventSequenceByPentest.get(pentestId) || 0;
   }
 
-  private nextEventId(pentestId: string): number {
+  private nextSequence(pentestId: string): number {
     const next = (this.eventSequenceByPentest.get(pentestId) || 0) + 1;
     this.eventSequenceByPentest.set(pentestId, next);
     return next;
+  }
+
+  private parseLastEventSequence(lastEventId?: string): number | undefined {
+    if (!lastEventId) {
+      return undefined;
+    }
+
+    const trimmed = lastEventId.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    if (/^\d+$/.test(trimmed)) {
+      const parsed = Number.parseInt(trimmed, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+    }
+
+    const match = /^evt-(\d+)(?:-|$)/.exec(trimmed);
+    if (!match) {
+      return undefined;
+    }
+
+    const parsed = Number.parseInt(match[1], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   }
 
   /**

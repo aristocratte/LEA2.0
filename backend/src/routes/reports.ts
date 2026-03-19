@@ -73,11 +73,11 @@ export async function reportRoutes(fastify: FastifyInstance) {
         const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'];
         const maxSeverity = findings.length > 0
           ? findings.reduce((min, f) =>
-              severityOrder.indexOf(f.severity) < severityOrder.indexOf(min)
-                ? f.severity
-                : min,
-              'INFORMATIONAL'
-            )
+            severityOrder.indexOf(f.severity) < severityOrder.indexOf(min)
+              ? f.severity
+              : min,
+            'INFORMATIONAL'
+          )
           : null;
 
         return {
@@ -309,8 +309,15 @@ export async function reportRoutes(fastify: FastifyInstance) {
 
     // Notify SSE clients
     sseManager.broadcast(id, {
-      type: 'session_complete',
-      data: { reportId: report.id },
+      runId: id,
+      source: 'system',
+      audience: 'internal',
+      surfaceHint: 'activity',
+      eventType: 'session_complete',
+      payload: {
+        type: 'session_complete',
+        reportId: report.id
+      }
     });
 
     return { data: report };

@@ -1,0 +1,110 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e7]: L
+          - generic [ref=e8]: LEA
+        - navigation [ref=e9]:
+          - link "Pentest" [ref=e10] [cursor=pointer]:
+            - /url: /pentest
+          - link "Providers" [ref=e11] [cursor=pointer]:
+            - /url: /providers
+          - link "Reports" [ref=e12] [cursor=pointer]:
+            - /url: /reports
+        - button [ref=e13]:
+          - img [ref=e14]
+    - main [ref=e17]:
+      - generic [ref=e18]:
+        - complementary [ref=e19]:
+          - generic [ref=e20]:
+            - button "New pentest" [ref=e21]:
+              - img [ref=e22]
+              - text: New pentest
+            - generic [ref=e23]:
+              - paragraph [ref=e24]: History
+              - button "Select" [ref=e25]
+          - paragraph [ref=e27]: No pentests yet
+        - generic [ref=e28]:
+          - button "Launch Agent Swarm" [ref=e30]:
+            - img [ref=e31]
+            - text: Launch Agent Swarm
+          - generic [ref=e34]:
+            - generic [ref=e35]:
+              - heading "Configure Pentest" [level=1] [ref=e36]
+              - paragraph [ref=e37]: Define the target and depth for your penetration test
+            - generic [ref=e38]:
+              - generic [ref=e39]:
+                - generic [ref=e40]: Target
+                - textbox "example.com, 192.168.1.100, or https://app.example.com" [ref=e41]
+              - generic [ref=e42]:
+                - generic [ref=e43]: Scope
+                - generic [ref=e44]:
+                  - paragraph [ref=e45]: Le scope definit precisement ce qui est autorise a tester. Tout element non inclus dans In Scope doit etre considere hors perimetre.
+                  - paragraph [ref=e46]: "Exemple: In Scope = app.example.com, api.example.com • Out of Scope = prod-db.example.com, *.internal.example.com"
+                - generic [ref=e47]:
+                  - generic [ref=e48]:
+                    - paragraph [ref=e49]: In Scope
+                    - generic [ref=e52]:
+                      - textbox "*.example.com" [ref=e53]
+                      - button [ref=e54]:
+                        - img [ref=e55]
+                  - generic [ref=e56]:
+                    - paragraph [ref=e57]: Out of Scope
+                    - generic [ref=e60]:
+                      - textbox "localhost" [ref=e61]
+                      - button [ref=e62]:
+                        - img [ref=e63]
+              - generic [ref=e64]:
+                - generic [ref=e65]: Pentest Length
+                - generic [ref=e66]:
+                  - button "Court 10-25 min Validation rapide de surface" [ref=e67]:
+                    - paragraph [ref=e68]: Court
+                    - paragraph [ref=e69]: 10-25 min
+                    - paragraph [ref=e70]: Validation rapide de surface
+                  - button "Moyen 25-45 min Assessment equilibre" [ref=e71]:
+                    - paragraph [ref=e72]: Moyen
+                    - paragraph [ref=e73]: 25-45 min
+                    - paragraph [ref=e74]: Assessment equilibre
+                  - button "Long 35-70+ min Approfondi (> 30 min)" [ref=e75]:
+                    - paragraph [ref=e76]: Long
+                    - paragraph [ref=e77]: 35-70+ min
+                    - paragraph [ref=e78]: Approfondi (> 30 min)
+                  - button "Profond 65-120+ min Investigation poussée (> 1h)" [ref=e79]:
+                    - paragraph [ref=e80]: Profond
+                    - paragraph [ref=e81]: 65-120+ min
+                    - paragraph [ref=e82]: Investigation poussée (> 1h)
+              - generic [ref=e83]:
+                - generic [ref=e84]:
+                  - img [ref=e85]
+                  - text: AI Provider
+                - generic [ref=e88]:
+                  - combobox [ref=e89]:
+                    - option "Default (env / OAuth)" [selected]
+                  - combobox [ref=e90]:
+                    - option "Default model" [selected]
+                - paragraph [ref=e91]: Leave default to use Claude Code OAuth or ANTHROPIC_API_KEY env var
+              - generic [ref=e92]:
+                - generic [ref=e93]:
+                  - img [ref=e94]
+                  - text: Deep Thinking Budget
+                - button "Deep thinking enabled" [ref=e102]:
+                  - generic [ref=e103]: Deep thinking enabled
+                - generic [ref=e106]:
+                  - button "Light Thinking leger 1000-4000" [ref=e107]:
+                    - paragraph [ref=e108]: Light
+                    - paragraph [ref=e109]: Thinking leger
+                    - paragraph [ref=e110]: 1000-4000
+                  - button "Standard Deep thinking standard 8000-16000" [ref=e111]:
+                    - paragraph [ref=e112]: Standard
+                    - paragraph [ref=e113]: Deep thinking standard
+                    - paragraph [ref=e114]: 8000-16000
+                  - button "Intensive Deep thinking intensif 20000+" [ref=e115]:
+                    - paragraph [ref=e116]: Intensive
+                    - paragraph [ref=e117]: Deep thinking intensif
+                    - paragraph [ref=e118]: 20000+
+                - paragraph [ref=e119]: "Current budget: 12000"
+              - generic [ref=e120]:
+                - button "Cancel" [ref=e121]
+                - button "Start Pentest" [disabled] [ref=e122]
+  - alert [ref=e123]

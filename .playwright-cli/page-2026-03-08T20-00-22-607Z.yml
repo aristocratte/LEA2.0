@@ -1,0 +1,132 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e9]:
+            - paragraph [ref=e10]: LEA Platform
+            - text: Pentest Workspace
+        - navigation [ref=e11]:
+          - link "Pentest" [ref=e12] [cursor=pointer]:
+            - /url: /pentest
+          - link "Providers" [ref=e13] [cursor=pointer]:
+            - /url: /providers
+          - link "Reports" [ref=e14] [cursor=pointer]:
+            - /url: /reports
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - text: Minimal control surface
+          - button [ref=e20]:
+            - img [ref=e21]
+    - main [ref=e24]:
+      - generic [ref=e147]:
+        - generic [ref=e148]:
+          - generic [ref=e149]:
+            - paragraph [ref=e150]: Session
+            - generic [ref=e151]:
+              - generic [ref=e152]:
+                - generic [ref=e153]:
+                  - paragraph [ref=e154]: Navigation first
+                  - paragraph [ref=e155]: Keep the center thread reserved for orchestration voice and decision-grade changes.
+                - img [ref=e156]
+              - generic [ref=e159]:
+                - generic [ref=e160]:
+                  - paragraph [ref=e161]: Agents
+                  - paragraph [ref=e162]: "1"
+                  - paragraph [ref=e163]: 1 active
+                - generic [ref=e164]:
+                  - paragraph [ref=e165]: Findings
+                  - paragraph [ref=e166]: "0"
+                  - paragraph [ref=e167]: COMPLETED
+          - generic [ref=e168]:
+            - paragraph [ref=e169]: Panels
+            - generic [ref=e170]:
+              - generic [ref=e171]:
+                - generic [ref=e172]:
+                  - paragraph [ref=e173]: Conversation
+                  - paragraph [ref=e174]: 2 center items
+                - img [ref=e175]
+              - generic [ref=e178]:
+                - generic [ref=e179]:
+                  - paragraph [ref=e180]: Signals
+                  - paragraph [ref=e181]: 1 latest items
+                - img [ref=e182]
+              - generic [ref=e185]:
+                - generic [ref=e186]:
+                  - paragraph [ref=e187]: Inspector
+                  - paragraph [ref=e188]: Open
+                - img [ref=e189]
+          - generic [ref=e192]:
+            - generic [ref=e193]:
+              - paragraph [ref=e194]: Latest Signals
+              - generic [ref=e195]: "1"
+            - generic [ref=e380] [cursor=pointer]:
+              - img [ref=e382]
+              - generic [ref=e384]:
+                - generic [ref=e385]: Sensitive probe prepared
+                - generic [ref=e386]:
+                  - generic [ref=e387]: running
+                  - generic [ref=e388]: •
+                  - generic [ref=e389]: App Logic
+        - generic [ref=e198]:
+          - generic [ref=e199]:
+            - generic [ref=e200]:
+              - img [ref=e202]
+              - generic [ref=e205]:
+                - generic [ref=e206]:
+                  - text: Nia Orchestrator
+                  - generic [ref=e207]: v1.0
+                - generic [ref=e208]:
+                  - generic [ref=e210]: System Live
+                  - generic [ref=e211]: "Target: api.example.com"
+            - button [ref=e213]:
+              - img [ref=e214]
+          - generic [ref=e220]:
+            - generic [ref=e390]:
+              - img [ref=e392]
+              - generic [ref=e395]:
+                - generic [ref=e396]:
+                  - generic [ref=e397]: Orchestrator
+                  - generic [ref=e398]: 20:57
+                - generic [ref=e399]: I have a strong lead, but the next probe crosses the sensitive-tool threshold. I am pausing here for an explicit operator decision.
+            - generic [ref=e453]:
+              - img [ref=e455]
+              - generic [ref=e458]:
+                - generic [ref=e459]:
+                  - generic [ref=e460]: Authorization Required
+                  - generic [ref=e461]: "Risk Class: high"
+                - 'heading "Authorize `sqlmap --risk 3 --level 5` against the authenticated billing surface." [level=4] [ref=e462]'
+                - generic [ref=e463]:
+                  - button "Approve Execution" [ref=e464]
+                  - button "Deny" [ref=e465]
+          - generic [ref=e232]:
+            - textbox "Message Nia to alter strategy or approve actions..." [ref=e233]
+            - button [disabled] [ref=e234]:
+              - img [ref=e235]
+        - generic [ref=e415]:
+          - generic [ref=e416]:
+            - heading "Inspector" [level=3] [ref=e417]:
+              - img [ref=e418]
+              - text: Inspector
+            - button [ref=e420]:
+              - img [ref=e421]
+          - generic [ref=e425]:
+            - button "Summary" [ref=e426]: Summary
+            - button "Advanced" [ref=e428]
+          - generic [ref=e430]:
+            - generic [ref=e431]:
+              - heading "Event Details" [level=4] [ref=e432]
+              - generic [ref=e433]:
+                - generic [ref=e434]: Sensitive tool preview
+                - generic [ref=e435]: 2026-03-08T19:59:11.532Z
+            - generic [ref=e436]:
+              - heading "Summary" [level=4] [ref=e437]
+              - generic [ref=e438]: The agent prepared a high-risk probe and is waiting for a decision.
+            - generic [ref=e439]:
+              - heading "Parameters" [level=4] [ref=e440]
+              - generic [ref=e442]: "{ \"toolName\": \"sqlmap\", \"riskClass\": \"high\", \"target\": \"api.example.com\" }"
+  - button "Open Next.js Dev Tools" [ref=e48] [cursor=pointer]:
+    - img [ref=e49]
+  - alert [ref=e52]

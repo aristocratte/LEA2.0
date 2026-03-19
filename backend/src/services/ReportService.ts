@@ -5,6 +5,7 @@
  */
 
 import { PrismaClient, Severity } from '@prisma/client';
+import { reportStatsSchema, toPrismaJson, type ReportStatsJson } from '../types/schemas.js';
 
 const prisma = new PrismaClient();
 
@@ -22,6 +23,11 @@ interface ReportStats {
   maxSeverity: string | null;
 }
 
+type ReportFinding = {
+  severity: Severity;
+  category: string;
+  cvss_score: number | null;
+};
 
 interface CreateReportOptions {
   source?: 'classic' | 'swarm';
@@ -75,7 +81,7 @@ export class ReportService {
         methodology: this.getDefaultMethodology(),
         scope_description: JSON.stringify(pentest.scope, null, 2),
         status: 'COMPLETE',
-        stats: { ...stats, source: options.source || 'classic' } as any,
+        stats: toPrismaJson(reportStatsSchema.parse({ ...stats, source: options.source || 'classic' })),
         completed_at: new Date(),
         findings: {
           connect: pentest.findings.map(f => ({ id: f.id })),
@@ -92,7 +98,7 @@ export class ReportService {
   /**
    * CALCULE LES STATISTIQUES DES FINDINGS
    */
-  private calculateStats(findings: any[]): ReportStats {
+  private calculateStats(findings: ReportFinding[]): ReportStatsJson {
     const severityOrder: Record<Severity, number> = {
       CRITICAL: 0,
       HIGH: 1,
@@ -137,7 +143,11 @@ export class ReportService {
   /**
    * GÉNÈRE UN RÉSUMÉ EXÉCUTIF
    */
-  private async generateExecutiveSummary(pentest: any, stats: ReportStats, source: 'classic' | 'swarm'): Promise<string> {
+  private async generateExecutiveSummary(
+    pentest: { target: string; findings: ReportFinding[] },
+    stats: ReportStats,
+    source: 'classic' | 'swarm'
+  ): Promise<string> {
     // Si pas de findings, retourner un message simple
     if (pentest.findings.length === 0) {
       return source === 'swarm'
@@ -181,8 +191,8 @@ Immediate attention is required for critical and high severity findings to preve
     return `The security posture appears **LOW RISK** based on the findings. Standard security practices should be maintained.`;
   }
 
-  private calculateAvgCvss(findings: any[]): number | null {
-    const withCvss = findings.filter(f => f.cvss_score !== null);
+  private calculateAvgCvss(findings: ReportFinding[]): number | null {
+    const withCvss = findings.filter((finding): finding is ReportFinding & { cvss_score: number } => finding.cvss_score !== null);
     if (withCvss.length === 0) return null;
     return withCvss.reduce((sum, f) => sum + f.cvss_score, 0) / withCvss.length;
   }

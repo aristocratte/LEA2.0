@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Settings } from 'lucide-react';
+import { Settings, Shield, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/layout/theme-toggle';
 
 const tabs = [
   { id: 'pentest', label: 'Pentest', href: '/pentest' },
@@ -15,18 +16,19 @@ export function Header() {
   const pathname = usePathname();
 
   return (
-    <header className="h-14 border-b border-white/[0.09] bg-[#131316]/80 backdrop-blur-xl sticky top-0 z-50">
-      <div className="flex items-center justify-between h-full px-6">
-        {/* Logo */}
+    <header className="sticky top-0 z-50 px-3 py-3 md:px-5 md:py-4">
+      <div className="lea-panel-strong mx-auto flex h-16 max-w-[1800px] items-center justify-between rounded-[28px] px-4 md:px-5">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center">
-            <span className="text-[10px] font-bold text-white">L</span>
+          <div className="flex h-10 w-10 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+            <Shield className="h-4.5 w-4.5 text-white" />
           </div>
-          <span className="text-sm font-semibold tracking-wide">LEA</span>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.24em] text-white/40">LEA Platform</p>
+            <span className="text-sm font-semibold tracking-[0.06em] text-white">Pentest Workspace</span>
+          </div>
         </div>
 
-        {/* Navigation tabs */}
-        <nav className="flex items-center gap-1 bg-white/[0.05] rounded-full p-1">
+        <nav className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1 md:flex">
           {tabs.map((tab) => {
             const isActive = pathname.startsWith(tab.href);
             return (
@@ -34,10 +36,10 @@ export function Header() {
                 key={tab.id}
                 href={tab.href}
                 className={cn(
-                  'px-5 py-1.5 text-sm rounded-full transition-all duration-200',
+                  'rounded-full px-5 py-2 text-sm transition-all duration-200',
                   isActive
-                    ? 'bg-white/[0.16] text-white font-medium'
-                    : 'text-[#85858f] hover:text-white hover:bg-white/[0.07]'
+                    ? 'bg-white text-black shadow-[0_10px_30px_-18px_rgba(255,255,255,0.8)]'
+                    : 'text-white/52 hover:bg-white/[0.08] hover:text-white'
                 )}
               >
                 {tab.label}
@@ -46,10 +48,16 @@ export function Header() {
           })}
         </nav>
 
-        {/* Settings */}
-        <button className="p-2 rounded-full hover:bg-white/[0.07] text-[#85858f] hover:text-white transition-colors">
-          <Settings className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/70 lg:flex">
+            <Sparkles className="h-3.5 w-3.5 text-sky-200" />
+            Minimal control surface
+          </div>
+          <ThemeToggle />
+          <button className="rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-white/60 transition-colors hover:bg-white/[0.08] hover:text-white">
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </header>
   );

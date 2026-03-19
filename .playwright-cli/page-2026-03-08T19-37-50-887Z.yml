@@ -1,0 +1,51 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e9]:
+            - paragraph [ref=e10]: LEA Platform
+            - text: Pentest Workspace
+        - navigation [ref=e11]:
+          - link "Pentest" [ref=e12] [cursor=pointer]:
+            - /url: /pentest
+          - link "Providers" [ref=e13] [cursor=pointer]:
+            - /url: /providers
+          - link "Reports" [ref=e14] [cursor=pointer]:
+            - /url: /reports
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - text: Minimal control surface
+          - button [ref=e20]:
+            - img [ref=e21]
+    - main [ref=e24]:
+      - generic [ref=e147]:
+        - generic [ref=e148]:
+          - heading "Activity Feed" [level=3] [ref=e150]
+          - generic [ref=e152]: Awaiting telemetry...
+        - generic [ref=e153]:
+          - generic [ref=e154]:
+            - generic [ref=e155]:
+              - img [ref=e157]
+              - generic [ref=e160]:
+                - generic [ref=e161]:
+                  - text: Nia Orchestrator
+                  - generic [ref=e162]: v1.0
+                - generic [ref=e163]:
+                  - generic [ref=e165]: System Live
+                  - generic [ref=e166]: "Target: api.example.com"
+            - button [ref=e168]:
+              - img [ref=e169]
+          - generic [ref=e175]:
+            - img [ref=e177]
+            - heading "Nia is Ready" [level=2] [ref=e179]
+            - paragraph [ref=e180]: Connected to the C2 bridge. Provide an objective or wait for the orchestrator to outline the initial strategy.
+          - generic [ref=e182]:
+            - textbox "Message Nia to alter strategy or approve actions..." [ref=e183]
+            - button [disabled] [ref=e184]:
+              - img [ref=e185]
+  - button "Open Next.js Dev Tools" [ref=e48] [cursor=pointer]:
+    - img [ref=e49]
+  - alert [ref=e52]

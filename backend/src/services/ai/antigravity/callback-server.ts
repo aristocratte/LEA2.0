@@ -1,47 +1,57 @@
-import express from "express";
-import type { Server } from "http";
+import { createServer } from 'node:http';
 
 export const OAUTH_PORT = 51121;
 
+const SUCCESS_HTML = '<h1>Authentication successful!</h1><p>You can close this window and return to LEA.</p>';
+const FAILURE_HTML = '<h1>Authentication failed</h1><p>Missing code or state.</p>';
+
 export function startCallbackServer(): Promise<{
-    code: string;
-    state: string;
+  code: string;
+  state: string;
 }> {
-    return new Promise((resolve, reject) => {
-        const app = express();
-        let server: Server;
+  return new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const requestUrl = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
+      if (requestUrl.pathname !== '/oauth-callback') {
+        res.statusCode = 404;
+        res.end('Not found');
+        return;
+      }
 
-        // Timeout after 5 minutes
-        const timeout = setTimeout(() => {
-            if (server) server.close();
-            reject(new Error("OAuth timeout: No callback received within 5 minutes."));
-        }, 5 * 60 * 1000);
+      const code = requestUrl.searchParams.get('code') || undefined;
+      const state = requestUrl.searchParams.get('state') || undefined;
 
-        app.get("/oauth-callback", (req, res) => {
-            const code = req.query.code as string | undefined;
-            const state = req.query.state as string | undefined;
+      if (code && state) {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(SUCCESS_HTML);
 
-            if (code && state) {
-                res.send("<h1>Authentication successful!</h1><p>You can close this window and return to LEA.</p>");
+        setTimeout(() => {
+          server.close();
+          clearTimeout(timeout);
+          resolve({ code, state });
+        }, 100);
+        return;
+      }
 
-                // Give time for response to be sent before closing
-                setTimeout(() => {
-                    server.close();
-                    clearTimeout(timeout);
-                    resolve({ code, state });
-                }, 100);
-            } else {
-                res.status(400).send("<h1>Authentication failed</h1><p>Missing code or state.</p>");
-                setTimeout(() => {
-                    server.close();
-                    clearTimeout(timeout);
-                    reject(new Error("Missing code or state in OAuth callback"));
-                }, 100);
-            }
-        });
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.end(FAILURE_HTML);
 
-        server = app.listen(OAUTH_PORT, "0.0.0.0", () => {
-            console.log(`[Antigravity OAuth] Callback server listening on port ${OAUTH_PORT}`);
-        });
+      setTimeout(() => {
+        server.close();
+        clearTimeout(timeout);
+        reject(new Error('Missing code or state in OAuth callback'));
+      }, 100);
     });
+
+    const timeout = setTimeout(() => {
+      server.close();
+      reject(new Error('OAuth timeout: No callback received within 5 minutes.'));
+    }, 5 * 60 * 1000);
+
+    server.listen(OAUTH_PORT, '0.0.0.0', () => {
+      console.log(`[Antigravity OAuth] Callback server listening on port ${OAUTH_PORT}`);
+    });
+  });
 }

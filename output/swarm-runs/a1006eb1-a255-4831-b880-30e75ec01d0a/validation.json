@@ -1,0 +1,46 @@
+{
+  "passed": false,
+  "invariants": [
+    {
+      "rule": "sequence_monotonic",
+      "passed": true,
+      "details": "15 envelopes checked"
+    },
+    {
+      "rule": "sequence_contiguous",
+      "passed": true
+    },
+    {
+      "rule": "correlation_ordering",
+      "passed": true,
+      "details": "7 groups checked"
+    },
+    {
+      "rule": "approval_resolution",
+      "passed": true,
+      "details": "0 unresolved approvals"
+    },
+    {
+      "rule": "agent_state_transition",
+      "passed": false,
+      "details": "1 agents checked"
+    },
+    {
+      "rule": "terminal_single_completion",
+      "passed": true,
+      "details": "1 terminal completions observed"
+    },
+    {
+      "rule": "artifact_review_linkage",
+      "passed": true
+    }
+  ],
+  "issues": [
+    {
+      "rule": "agent_state_transition",
+      "message": "Invalid agent transition agent.spawning -> agent.completed",
+      "eventId": "evt-10-1773007333534",
+      "sequence": 10
+    }
+  ]
+}

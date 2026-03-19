@@ -1,0 +1,20 @@
+{
+  "traceId": "88a5228d-e7d0-44db-b1a0-62687d4ca8a7",
+  "pentestId": "9c054c52-57ec-4d13-b914-560237a41544",
+  "mode": "scenario_capture",
+  "scenarioId": "nia-only-reply",
+  "status": "completed",
+  "storagePath": "/Users/aris/Documents/LEA/output/swarm-runs/88a5228d-e7d0-44db-b1a0-62687d4ca8a7",
+  "eventCount": 3,
+  "createdAt": "2026-03-08T21:59:33.384Z",
+  "metadata": {
+    "title": "Nia Only Reply",
+    "tags": [
+      "nia",
+      "single-voice"
+    ]
+  },
+  "completedAt": "2026-03-08T21:59:33.397Z",
+  "validationPath": "/Users/aris/Documents/LEA/output/swarm-runs/88a5228d-e7d0-44db-b1a0-62687d4ca8a7/validation.json",
+  "correlationPath": "/Users/aris/Documents/LEA/output/swarm-runs/88a5228d-e7d0-44db-b1a0-62687d4ca8a7/correlations.json"
+}

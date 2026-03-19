@@ -28,9 +28,10 @@ export async function streamRoutes(fastify: FastifyInstance) {
 
     // Create SSE client
     const clientId = randomUUID();
-    const parseEventId = (value: unknown): number | undefined => {
+    const parseEventId = (value: unknown): string | undefined => {
+      if (typeof value === 'string' && value.trim()) return value.trim();
       const parsed = Number(value);
-      return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+      return Number.isFinite(parsed) && parsed > 0 ? String(Math.floor(parsed)) : undefined;
     };
     const headerLastEventIdRaw = Array.isArray(request.headers['last-event-id'])
       ? request.headers['last-event-id'][0]
@@ -41,9 +42,9 @@ export async function streamRoutes(fastify: FastifyInstance) {
 
     const client = {
       id: clientId,
-      send: (event: string, data: any, eventId?: number) => {
+      send: (event: string, data: any, eventId?: string) => {
         try {
-          if (typeof eventId === 'number' && eventId > 0) {
+          if (eventId !== undefined) {
             reply.raw.write(`id: ${eventId}\n`);
           }
           reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -59,10 +60,17 @@ export async function streamRoutes(fastify: FastifyInstance) {
 
     // Send initial connection event
     client.send('connected', {
-      connection_id: clientId,
-      pentest_id: id,
-      timestamp: Date.now(),
-      last_event_id: sseManager.getLatestEventId(id),
+      runId: id,
+      source: 'system',
+      audience: 'internal',
+      surfaceHint: 'activity',
+      eventType: 'connected',
+      payload: {
+        type: 'connected',
+        connection_id: clientId,
+        pentest_id: id,
+        timestamp: Date.now(),
+      }
     });
 
     // Heartbeat to keep connection alive (every 15s)

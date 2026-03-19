@@ -3,6 +3,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { CryptoService } from './CryptoService.js';
+import { CodexClient } from './ai/CodexClient.js';
+import { OpenCodeClient } from './ai/OpenCodeClient.js';
 
 const prisma = new PrismaClient();
 
@@ -47,6 +49,8 @@ const FALLBACK_ORDER: Record<string, string[]> = {
   GEMINI: ['ANTIGRAVITY', 'ANTHROPIC', 'OPENAI', 'ZHIPU'],
   ANTIGRAVITY: ['GEMINI', 'ANTHROPIC', 'OPENAI', 'ZHIPU'],
   CUSTOM: ['ANTHROPIC', 'ZHIPU'],
+  CODEX: ['ANTHROPIC', 'ZHIPU', 'OPENAI'],
+  OPENCODE: ['ANTHROPIC', 'ZHIPU', 'OPENAI', 'CODEX'],
 };
 
 interface CircuitBreakerState {

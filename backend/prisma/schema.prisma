@@ -55,6 +55,8 @@ model Pentest {
   kali_audit_logs KaliAuditLog[]
   scope_proposals ScopeProposal[]
   events        PentestEvent[]
+  swarm_traces  SwarmTrace[]
+  swarm_runs    SwarmRun[]
   report        Report?
 
   @@index([status])
@@ -432,6 +434,30 @@ model PentestEvent {
   @@map("pentest_events")
 }
 
+model SwarmTrace {
+  id               String   @id
+  pentest_id       String
+  runtime_mode     String
+  scenario_id      String?
+  source_trace_id  String?
+  status           String
+  storage_path     String
+  event_count      Int      @default(0)
+  metadata         Json?
+  validation_path  String?
+  correlation_path String?
+  projection_path  String?
+  created_at       DateTime @default(now())
+  completed_at     DateTime?
+
+  pentest          Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+
+  @@index([pentest_id])
+  @@index([runtime_mode])
+  @@index([created_at])
+  @@map("swarm_traces")
+}
+
 // ============================================
 // REPORT
 // ============================================
@@ -569,6 +595,8 @@ enum ProviderType {
   CUSTOM
   GEMINI
   ANTIGRAVITY
+  CODEX
+  OPENCODE
 }
 
 enum HealthStatus {
@@ -724,3 +752,50 @@ model ContextRecallLog {
   @@map("context_recall_logs")
 }
 
+// ============================================
+// SWARM RUN (Dedicated swarm execution record)
+// ============================================
+
+model SwarmRun {
+  id                 String        @id @default(uuid())
+  pentestId          String
+  pentest            Pentest       @relation(fields: [pentestId], references: [id], onDelete: Cascade)
+  status             String        @default("queued") // queued, running, paused, merging, completed, partial_completed, failed
+  target             String
+  scope              String[]
+  providerId         String?
+  modelId            String?
+  maxAgents          Int           @default(8)
+  maxConcurrent      Int           @default(4)
+  findingsCount      Int           @default(0)
+  sysReptorProjectId String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  agents             SwarmAgent[]
+
+  @@index([pentestId])
+  @@map("swarm_runs")
+}
+
+// ============================================
+// SWARM AGENT (Individual agent within a run)
+// ============================================
+
+model SwarmAgent {
+  id          String    @id @default(uuid())
+  swarmRunId  String
+  swarmRun    SwarmRun  @relation(fields: [swarmRunId], references: [id], onDelete: Cascade)
+  name        String
+  role        String
+  status      String    @default("idle") // idle, thinking, executing, completed, failed
+  progress    Int       @default(0)
+  lastMessage String?
+  toolHistory String[]
+  spawnedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([swarmRunId])
+  @@map("swarm_agents")
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "type": "agent_lifecycle",
+    "text": "Agent Surface mapper (Recon) spawningspawning•Recon"
+  },
+  {
+    "type": "tool_execution",
+    "text": "Tool Execution: httpxcompleted"
+  },
+  {
+    "type": "tool_execution",
+    "text": "terminal.stream.deltarunning"
+  },
+  {
+    "type": "agent_lifecycle",
+    "text": "httpx triage sweeprunning"
+  },
+  {
+    "type": "agent_lifecycle",
+    "text": "Agent Surface mapper (Recon) completedcompleted•Recon"
+  }
+]

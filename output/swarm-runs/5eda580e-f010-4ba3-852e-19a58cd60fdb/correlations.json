@@ -1,0 +1,11 @@
+[
+  {
+    "correlationId": "msg-nia-only",
+    "count": 1,
+    "eventTypes": [
+      "assistant.message.done"
+    ],
+    "startSequence": 2,
+    "endSequence": 2
+  }
+]

@@ -1,0 +1,58 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e9]:
+            - paragraph [ref=e10]: LEA Platform
+            - text: Pentest Workspace
+        - navigation [ref=e11]:
+          - link "Pentest" [ref=e12] [cursor=pointer]:
+            - /url: /pentest
+          - link "Providers" [ref=e13] [cursor=pointer]:
+            - /url: /providers
+          - link "Reports" [ref=e14] [cursor=pointer]:
+            - /url: /reports
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - text: Minimal control surface
+          - button [ref=e20]:
+            - img [ref=e21]
+    - main [ref=e24]:
+      - generic [ref=e27]:
+        - generic [ref=e33]:
+          - heading "Define Scope Boundaries" [level=1] [ref=e53]
+          - paragraph [ref=e35]: Delineate the allowed and restricted perimeters.
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - generic [ref=e56]:
+              - img [ref=e58]
+              - generic [ref=e62]:
+                - paragraph [ref=e63]: In Scope
+                - paragraph [ref=e64]: Allowed environments and hosts.
+            - generic [ref=e66]:
+              - textbox "Add explicit targets (e.g., *.example.com)" [ref=e67]
+              - button [ref=e68]:
+                - img [ref=e69]
+          - generic [ref=e70]:
+            - generic [ref=e71]:
+              - img [ref=e73]
+              - generic [ref=e75]:
+                - paragraph [ref=e76]: Out of Scope
+                - paragraph [ref=e77]: Strictly off-limits during this run.
+            - generic [ref=e79]:
+              - textbox "Add exclusions (e.g., prod.api.com)" [ref=e80]
+              - button [ref=e81]:
+                - img [ref=e82]
+        - generic [ref=e39]:
+          - button "Back" [ref=e84]:
+            - img [ref=e85]
+            - text: Back
+          - button "Continue" [active] [ref=e40]:
+            - text: Continue
+            - img [ref=e41]
+  - button "Open Next.js Dev Tools" [ref=e48] [cursor=pointer]:
+    - img [ref=e49]
+  - alert [ref=e52]

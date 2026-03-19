@@ -1,0 +1,39 @@
+{
+  "passed": true,
+  "invariants": [
+    {
+      "rule": "sequence_monotonic",
+      "passed": true,
+      "details": "3 envelopes checked"
+    },
+    {
+      "rule": "sequence_contiguous",
+      "passed": true
+    },
+    {
+      "rule": "correlation_ordering",
+      "passed": true,
+      "details": "1 groups checked"
+    },
+    {
+      "rule": "approval_resolution",
+      "passed": true,
+      "details": "0 unresolved approvals"
+    },
+    {
+      "rule": "agent_state_transition",
+      "passed": true,
+      "details": "0 agents checked"
+    },
+    {
+      "rule": "terminal_single_completion",
+      "passed": true,
+      "details": "0 terminal completions observed"
+    },
+    {
+      "rule": "artifact_review_linkage",
+      "passed": true
+    }
+  ],
+  "issues": []
+}

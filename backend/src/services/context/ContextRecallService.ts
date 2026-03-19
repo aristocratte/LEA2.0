@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { kaliMcpClient } from '../mcp/KaliMCPClient.js';
 import { ContextCompactionService } from './ContextCompactionService.js';
+import { contextRecallResultsSchema, toPrismaJson } from '../../types/schemas.js';
 
 export interface ContextRecallRequest {
   pentestId: string;
@@ -63,10 +64,10 @@ export class ContextRecallService {
         pentest_id: input.pentestId,
         actor: input.actor || 'system',
         query,
-        results_json: {
+        results_json: toPrismaJson(contextRecallResultsSchema.parse({
           snippets: deduped,
           count: deduped.length,
-        } as any,
+        })),
       },
     });
 
@@ -137,4 +138,3 @@ export class ContextRecallService {
     return deduped.sort((a, b) => b.score - a.score);
   }
 }
-

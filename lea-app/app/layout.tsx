@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { Shell } from '@/components/layout/shell';
 import './globals.css';
 
@@ -26,7 +27,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Shell>{children}</Shell>
+        <ErrorBoundary>
+          <Shell>{children}</Shell>
+        </ErrorBoundary>
       </body>
     </html>
   );

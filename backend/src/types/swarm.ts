@@ -1,3 +1,4 @@
+import type { SwarmRuntimeConfig } from '../runtime/swarm/ScenarioModel.js';
 /**
  * Types for Agent Swarm pentest runs and SysReptor integration
  */
@@ -55,6 +56,32 @@ export interface SysReptorFinding {
   updatedAt: string;
 }
 
+export interface SwarmTask {
+  id: string;
+  swarmRunId: string;
+  agentId: string;
+  agentName: string;
+  agentRole: string;
+  title: string;
+  description: string;
+  status: 'planned' | 'in_progress' | 'completed' | 'failed';
+  toolName?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface AgentMessage {
+  id: string;
+  swarmRunId: string;
+  fromAgentId: string;
+  fromAgentName: string;
+  fromRole: string;
+  content: string;
+  type: 'status' | 'finding' | 'handoff';
+  timestamp: number;
+}
+
 export interface Swarm {
   id: string;
   pentestId: string;
@@ -67,6 +94,7 @@ export interface Swarm {
   sysReptorProjectId?: string;
   agents: Agent[];
   findings: SysReptorFinding[];
+  tasks: SwarmTask[];
   startedAt: string;
   endedAt?: string;
 }
@@ -81,6 +109,8 @@ export interface StartSwarmAuditRequest {
   maxAgents?: number;
   maxConcurrentAgents?: number;
   autoPushToSysReptor?: boolean;
+  phase?: 'preflight' | 'active' | 'complete';
+  runtime?: SwarmRuntimeConfig;
 }
 
 export interface StartSwarmParams extends StartSwarmAuditRequest {
@@ -130,7 +160,10 @@ export type SwarmStreamEventType =
   | 'swarm_resumed'
   | 'swarm_merged'
   | 'swarm_completed'
-  | 'swarm_failed';
+  | 'swarm_failed'
+  | 'task_created'
+  | 'task_updated'
+  | 'agent_message';
 
 export interface SwarmConnectedEventData {
   connection_id: string;
@@ -203,6 +236,18 @@ export interface SwarmFailedEventData {
   timestamp: number;
 }
 
+export interface SwarmTaskEventData {
+  swarmRunId: string;
+  task: SwarmTask;
+  timestamp: number;
+}
+
+export interface AgentMessageEventData {
+  swarmRunId: string;
+  message: AgentMessage;
+  timestamp: number;
+}
+
 export interface SwarmStreamEventMap {
   swarm_connected: SwarmConnectedEventData;
   swarm_started: SwarmStartedEventData;
@@ -215,6 +260,9 @@ export interface SwarmStreamEventMap {
   swarm_merged: SwarmMergedEventData;
   swarm_completed: SwarmCompletedEventData;
   swarm_failed: SwarmFailedEventData;
+  task_created: SwarmTaskEventData;
+  task_updated: SwarmTaskEventData;
+  agent_message: AgentMessageEventData;
 }
 
 export type SwarmStreamMessage = {

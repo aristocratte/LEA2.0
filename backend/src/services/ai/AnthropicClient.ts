@@ -10,6 +10,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { asAsyncIterable, toAbortSignal } from './AIClient.js';
 import type {
     AIClient,
     StreamChatParams,
@@ -18,6 +19,30 @@ import type {
     ChatMessage,
     ToolDefinition,
 } from './AIClient.js';
+
+interface AnthropicStreamEvent {
+    type: string;
+    message?: {
+        usage?: {
+            input_tokens?: number;
+        };
+    };
+    content_block?: {
+        type?: string;
+        id?: string;
+        name?: string;
+    };
+    delta?: {
+        type?: string;
+        text?: string;
+        thinking?: string;
+        partial_json?: string;
+        stop_reason?: string;
+    };
+    usage?: {
+        output_tokens?: number;
+    };
+}
 
 // ============================================
 // AnthropicClient
@@ -29,11 +54,20 @@ export class AnthropicClient implements AIClient {
 
     /**
      * Create an Anthropic client.
-     * If apiKey is provided, it's used directly.
-     * Otherwise, the SDK will try ANTHROPIC_API_KEY env var.
+     * - apiKey: standard API key (x-api-key header)
+     * - authToken: OAuth Bearer token (Authorization: Bearer header)
+     * - If neither is provided, the SDK tries ANTHROPIC_API_KEY env var.
      */
-    constructor(apiKey?: string) {
-        this.client = new Anthropic(apiKey ? { apiKey } : undefined);
+    constructor(apiKey?: string, authToken?: string) {
+        if (authToken) {
+            // OAuth Bearer token — use defaultHeaders to set Authorization
+            this.client = new Anthropic({
+                apiKey: 'oauth',  // SDK requires non-empty apiKey; override with header
+                defaultHeaders: { 'Authorization': `Bearer ${authToken}`, 'x-api-key': '' },
+            });
+        } else {
+            this.client = new Anthropic(apiKey ? { apiKey } : undefined);
+        }
         this.providerName = 'anthropic';
     }
 
@@ -71,7 +105,7 @@ export class AnthropicClient implements AIClient {
 
         // Use the raw stream approach for full control
         const response = await this.client.messages.create(requestParams, {
-            signal: signal as any,
+            signal: toAbortSignal(signal),
         });
 
         // Collect content blocks from the raw streaming response
@@ -87,7 +121,7 @@ export class AnthropicClient implements AIClient {
         let stopReason: string = 'end_turn';
 
         // Process raw SSE events from the stream
-        for await (const event of response as any) {
+        for await (const event of asAsyncIterable<AnthropicStreamEvent>(response)) {
             switch (event.type) {
                 case 'message_start':
                     if (event.message?.usage) {
@@ -103,8 +137,8 @@ export class AnthropicClient implements AIClient {
                         onEvent({ type: 'thinking_start' });
                     } else if (event.content_block?.type === 'tool_use') {
                         currentToolUse = {
-                            id: event.content_block.id,
-                            name: event.content_block.name,
+                            id: event.content_block.id || '',
+                            name: event.content_block.name || '',
                             inputJson: '',
                         };
                     }
@@ -113,14 +147,14 @@ export class AnthropicClient implements AIClient {
                 case 'content_block_delta':
                     if (event.delta?.type === 'text_delta') {
                         if (currentTextBlock) {
-                            currentTextBlock.text += event.delta.text;
+                            currentTextBlock.text += event.delta.text || '';
                         }
-                        onEvent({ type: 'text_delta', text: event.delta.text });
+                        onEvent({ type: 'text_delta', text: event.delta.text || '' });
                     } else if (event.delta?.type === 'thinking_delta') {
-                        onEvent({ type: 'thinking_delta', text: event.delta.thinking });
+                        onEvent({ type: 'thinking_delta', text: event.delta.thinking || '' });
                     } else if (event.delta?.type === 'input_json_delta') {
                         if (currentToolUse) {
-                            currentToolUse.inputJson += event.delta.partial_json;
+                            currentToolUse.inputJson += event.delta.partial_json || '';
                         }
                     }
                     break;

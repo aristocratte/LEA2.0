@@ -1,101 +1,77 @@
-# ADR-0002 — Modèle de données Swarm & SysReptor
+# ADR-0002 — Modele de donnees Swarm & SysReptor
 
-- **Statut**: Accepté
+- **Statut**: Accepte (etat transitoire MVP)
 - **Date**: 2026-02-27
-- **Décideurs**: LEA core team
-- **Contexte lié**: `backend/prisma/schema.prisma`, `doc/lea2/spec.md`
+- **Decideurs**: LEA core team
+- **Contexte lie**: `backend/prisma/schema.prisma`, `doc/lea2/spec.md`
 
 ## Contexte
-Le schéma Prisma actuel contient déjà des briques solides:
-- `Pentest` (session principale)
-- `Finding` (vulnérabilités)
-- `ToolExecution`, `KaliAuditLog` (traçabilité outils)
-- `PentestEvent` (event log)
-- `Report`, `ExportJob`
+L'ADR initiale visait des tables Swarm dediees. Le code actuellement deploye privilegie une approche transitoire:
+- runtime Swarm en memoire,
+- persistance des traces dans les tables metier deja existantes,
+- export report/PDF via modele `Report`.
 
-Pour le Swarm MVP, il faut persister:
-1. l’exécution d’un run multi-agents,
-2. l’état des agents,
-3. la liaison avec SysReptor,
-4. la traçabilité live et historique.
+## Decision appliquee actuellement (MVP)
+Utiliser un **modele hybride minimal**:
+1. etat d'execution Swarm en memoire (`PentestSwarm`),
+2. persistance des traces et resultats dans les tables existantes Prisma.
 
-## Options évaluées
-1. Tout stocker dans `Pentest.config` JSON (faible migration, forte dette)
-2. Ajouter tables Swarm dédiées + réutiliser tables métier existantes
-3. Créer un event-store séparé complet
+## Etat reel implemente (schema + code)
+1. Tables Prisma effectivement utilisees par le Swarm:
+- `Pentest`
+- `Finding`
+- `ToolExecution`
+- `PentestEvent`
+- `Report` / `ExportJob`
 
-## Décision
-Nous retenons **Option 2**: tables Swarm dédiées **minimales** + réutilisation maximale des modèles existants.
+2. Ecriture des findings Swarm:
+- `PentestSwarm` cree des `Finding` avec metadata:
+  - `source: "dynamic_swarm"`
+  - `swarmRunId`
+  - `agentId`
+  - `agentRole`
 
-## Modèle retenu
+3. Historisation de run:
+- Evenements stockes dans `PentestEvent`:
+  - `swarm_run_queued`
+  - `swarm_supervisor_plan`
+  - `swarm_run_paused`
+  - `swarm_run_resumed`
+  - `swarm_run_force_merge_requested`
+  - `swarm_run_merging`
+  - `swarm_run_completed`
+  - `swarm_run_failed`
 
-### 1) Nouvelles entités
+4. Tracabilite outils:
+- `ToolExecution` est alimente avec `agent_role = "swarm:<role>"`.
 
-#### `SwarmRun`
-- 1..N par `Pentest`
-- champs clés:
-  - `id`
-  - `pentest_id`
-  - `status` (`QUEUED|RUNNING|PAUSED|MERGING|COMPLETED|FAILED|PARTIAL_COMPLETED`)
-  - `config` (JSON)
-  - `started_at`, `ended_at`, `paused_at`
-  - `agents_spawned_count`, `findings_count`
-  - `force_merged` (bool)
+5. Export PDF:
+- Export via `Report` + `ExportService` (pdf-lib),
+- endpoint Swarm PDF (`/api/pentests/:id/swarm/report.pdf`) base sur le `sysReptorProjectId` present dans les `PentestEvent`.
 
-#### `SwarmAgent`
-- N..1 vers `SwarmRun`
-- champs clés:
-  - `id`
-  - `swarm_run_id`
-  - `name`, `role`
-  - `status` (`SPAWNED|THINKING|RUNNING_TOOL|IDLE|DONE|FAILED`)
-  - `progress` (0..100)
-  - `last_event_at`
-  - `metadata` (JSON)
+## Planned / non implemente dans cette version
+1. Entites dediees absentes du schema actuel:
+- `SwarmRun`
+- `SwarmAgent`
+- `SysReptorProjectLink`
 
-#### `SysReptorProjectLink`
-- 1..N par `Pentest` (ou 1..1 selon usage)
-- champs clés:
-  - `id`
-  - `pentest_id`
-  - `swarm_run_id` (nullable)
-  - `sysreptor_project_id`
-  - `sysreptor_project_type_id`
-  - `linked_at`
-  - `last_sync_at`
+2. Indexation dediee Swarm:
+- Pas d'index `SwarmRun(status)` ou `SwarmAgent(swarm_run_id, status)` tant que ces tables n'existent pas.
 
-### 2) Réutilisation des entités existantes
-- `Finding` reste la **source de vérité** applicative.
-  - Les findings swarm sont taggés via `metadata` (`source: "swarm"`, `swarmRunId`, `agentId`).
-- `PentestEvent` reste le journal événementiel principal pour l’historique UI (`Swarm History`).
-- `KaliAuditLog` journalise les actions outils (actor = `swarm:<agentRole>`).
+3. Reprise durable apres restart:
+- Non garantie tant que le runtime reste en memoire.
 
-## Indexation minimale recommandée
-- `SwarmRun(pentest_id, created_at)`
-- `SwarmRun(status)`
-- `SwarmAgent(swarm_run_id, status)`
-- `SysReptorProjectLink(pentest_id)`
-- Contrainte unicité optionnelle sur (`pentest_id`, `sysreptor_project_id`)
-
-## Conséquences
+## Consequences
 ### Positives
-- Historique swarm exploitable sans refonte.
-- Compatible avec le modèle de reporting déjà présent.
-- Permet la vue live + history sans surcharger `Pentest.config`.
+- Zero migration supplementaire pour livrer le MVP.
+- Reutilisation immediate des flux de reporting existants.
+- Debogage facilite via `PentestEvent` et `ToolExecution`.
 
-### Négatives / risques
-- Migration Prisma additionnelle.
-- Gestion de cohérence inter-table lors des fins de run.
+### Limites
+- Pas de source de verite relationnelle dediee pour l'etat vivant des agents.
+- Historique de run moins structurable qu'avec des tables `SwarmRun/SwarmAgent`.
 
-### Mitigations
-- Transactions Prisma sur étapes critiques (merge final + sync SysReptor).
-- Idempotence logique côté push SysReptor (clé par finding/swarmRun).
-
-## Alternatives rejetées
-- **Stockage full JSON dans `Pentest.config`**: rapide mais non maintenable et peu requêtable.
-- **Event store séparé**: trop complexe pour MVP.
-
-## Plan d’implémentation découlant de cette ADR
-1. Créer migration Prisma pour `SwarmRun`, `SwarmAgent`, `SysReptorProjectLink`.
-2. Étendre les types backend (`Swarm`, `Agent`, `SysReptorFinding`).
-3. Brancher persistance dans `startSwarmAudit` + stream SSE.
+## Plan de suite
+1. Introduire migration Prisma avec `SwarmRun`, `SwarmAgent`, `SysReptorProjectLink`.
+2. Conserver `Finding` comme verite applicative, mais referencer explicitement `swarm_run_id`.
+3. Basculer les endpoints state/history sur persistance durable au lieu du runtime memoire seul.

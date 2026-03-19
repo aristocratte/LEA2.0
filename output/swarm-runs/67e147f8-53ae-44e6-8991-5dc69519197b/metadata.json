@@ -1,0 +1,13 @@
+{
+  "traceId": "67e147f8-53ae-44e6-8991-5dc69519197b",
+  "pentestId": "e242ca88-8dd8-4b81-83b9-75d3a79a006b",
+  "mode": "replay",
+  "sourceTraceId": "ce0b4c6f-4616-4369-b54b-a88ad97079ea",
+  "status": "running",
+  "storagePath": "/Users/aris/Documents/LEA/output/swarm-runs/67e147f8-53ae-44e6-8991-5dc69519197b",
+  "eventCount": 0,
+  "createdAt": "2026-03-08T22:00:42.906Z",
+  "metadata": {
+    "replayTraceId": "ce0b4c6f-4616-4369-b54b-a88ad97079ea"
+  }
+}

@@ -34,6 +34,7 @@ export type FindingStatus = 'OPEN' | 'CONFIRMED' | 'FALSE_POSITIVE' | 'FIXED' | 
 export type PentestPhase = UiPentestPhase;
 
 export type PentestType = 'quick' | 'standard' | 'comprehensive' | 'custom';
+export type PentestLaunchMode = 'classic' | 'swarm';
 
 // Backend severity enum (UPPERCASE to match Prisma)
 export type ApiSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFORMATIONAL';
@@ -202,10 +203,10 @@ export interface PentestSession {
 
 // Provider types
 // Backend API provider type (UPPERCASE to match Prisma)
-export type ApiProviderType = 'ANTHROPIC' | 'ZHIPU' | 'OPENAI' | 'GEMINI' | 'CUSTOM' | 'ANTIGRAVITY';
+export type ApiProviderType = 'ANTHROPIC' | 'ZHIPU' | 'OPENAI' | 'GEMINI' | 'CUSTOM' | 'ANTIGRAVITY' | 'CODEX' | 'OPENCODE';
 
 // Frontend UI provider type (lowercase for display)
-export type ProviderType = 'anthropic' | 'zhipu' | 'openai' | 'gemini' | 'custom' | 'antigravity';
+export type ProviderType = 'anthropic' | 'zhipu' | 'openai' | 'gemini' | 'custom' | 'antigravity' | 'codex' | 'opencode';
 
 export interface ModelConfig {
   id: string;
@@ -231,6 +232,7 @@ export interface Provider {
   enabled: boolean;
   apiKey?: string;
   apiKeyConfigured?: boolean;
+  oauthConfigured?: boolean;
   baseUrl?: string;
   organizationId?: string;
   models: ModelConfig[];
@@ -485,6 +487,9 @@ export type {
   SwarmAgent,
   SwarmFinding,
   SwarmRun,
+  SwarmTask,
+  AgentMessage,
+  SwarmFeedMessage,
   Agent,
   SysReptorFinding,
   Swarm,
@@ -492,7 +497,7 @@ export type {
   StartSwarmAuditRequest,
   StartSwarmParams,
   StartSwarmResponse,
-} from '../src/types/swarm';
+} from './swarm';
 
 export interface ContextUsage {
   modelId: string;
@@ -619,108 +624,146 @@ export interface ProviderTestResponse {
 // SSE Event Types
 // ============================================
 
-export interface SSEEvent {
-  type: 'connected'
-  | 'preflight_started'
-  | 'preflight_check'
-  | 'preflight_remediation'
-  | 'preflight_blocked'
-  | 'preflight_complete'
-  | 'phase_change'
-  | 'status_change'
-  | 'context_usage'
-  | 'thinking_delta'
-  | 'message_delta'
-  | 'tool_start'
-  | 'tool_end'
-  | 'todos_updated'
-  | 'finding'
-  | 'tool_use'
-  | 'tool_result'
-  | 'error'
-  | 'session_complete'
-  | 'session_cancelled'
-  | 'scope_review_required'
-  | 'scope_review_updated'
-  | 'scope_review_applied'
-  | 'context_compaction_started'
-  | 'context_compacted'
-  | 'findings_agent_status'
-  | 'swarm_connected'
-  | 'swarm_started'
-  | 'agent_spawned'
-  | 'agent_status'
-  | 'finding_created'
-  | 'finding_updated'
-  | 'swarm_paused'
-  | 'swarm_resumed'
-  | 'swarm_merged'
-  | 'swarm_completed'
-  | 'swarm_failed'
-  | 'tool_approval_required';
-  data: Record<string, unknown> | unknown;
+export interface SwarmEventEnvelope<T extends SwarmEventPayload> {
+  id: string;             // Unique event ID
+  sequence: number;       // Ordering for replay
+  timestamp: number;
+  runId: string;
+  threadId?: string;
+  correlationId?: string; // Links tool calls, responses, and approvals together
+  parentEventId?: string;
+  source: string;         // 'nia', 'system', 'agent:recon'
+  audience: 'user' | 'internal' | 'debug';
+  surfaceHint: 'main' | 'activity' | 'review' | 'none';
+  eventType: T['type'];
+  payload: T;
 }
 
-export interface SSEConnectedEvent extends SSEEvent {
-  type: 'connected';
-  data: {
-    connection_id: string;
-    pentest_id: string;
-    timestamp: number;
-  };
+export type SwarmEventPayload =
+  // Nia conversational voice
+  | { type: 'assistant.preamble'; text: string }
+  | { type: 'assistant.message.start' | 'assistant.message.delta' | 'assistant.message.done'; text: string }
+  // Nia's short user-facing summary
+  | { type: 'thinking.summary.start' | 'thinking.summary.delta' | 'thinking.summary.done'; text: string }
+
+  // Agent lifecycles
+  | { type: 'agent.drafted' | 'agent.spawning' | 'agent.running' | 'agent.completed' | 'agent.failed' | 'agent.cancelled'; agentId: string; role: string; name: string }
+
+  // Orchestration & Tasks
+  | {
+    type: 'todo.created' | 'todo.updated' | 'todo.completed';
+    todo: {
+      id: string;
+      label: string;
+      status: string;
+      priority: string;
+      owner: string;
+      dependsOn?: string[];
+      kind: string;
+      createdAt: number
+    }
+  }
+
+  // Tech execution (Terminal / MCP / Tools)
+  | { type: 'tool.call.started' | 'tool.call.completed'; toolName: string; agentId: string; }
+  | { type: 'terminal.stream.started' | 'terminal.stream.delta' | 'terminal.stream.done'; streamId: string; streamType: 'stdout' | 'stderr'; chunk: string }
+  | { type: 'mcp.call.started' | 'mcp.call.completed'; target: string }
+
+  // Artifacts & Real Risk-Model Approvals
+  | { type: 'artifact.created' | 'artifact.updated'; artifactId: string; title: string; reviewId: string }
+  | {
+    type: 'approval.requested' | 'approval.resolved';
+    tool: string;
+    decision?: string;
+    scope: string[];
+    riskClass: 'read' | 'write' | 'exec' | 'network' | 'active_scan' | 'destructive';
+    sandboxProfile?: string;
+    requiresEscalation: boolean;
+    affectedTargets: string[]
+  }
+
+  // Swarm global lifecycle
+  | { type: 'swarm.connected'; connectionId: string; pentestId: string }
+  | { type: 'swarm.started'; status: string; target: string }
+  | { type: 'swarm.paused' }
+  | { type: 'swarm.resumed' }
+  | { type: 'swarm.completed' | 'swarm.failed'; status: string; error?: string }
+
+  // Legacy / Data findings (mapped to the new unified structure)
+  | { type: 'finding.created' | 'finding.updated'; findingId: string; title: string; severity: string }
+
+  // Custom wrappers around old structures we send from Fastify (which was 'any')
+  | { type: 'connected'; connection_id: string; pentest_id: string; timestamp: number }
+  | { type: 'preflight_started' | 'preflight_check' | 'preflight_remediation' | 'preflight_blocked' | 'preflight_complete'; check?: PreflightCheck; message?: string }
+  | { type: 'phase_change'; phase: ApiPentestPhase }
+  | { type: 'status_change'; status: string }
+  | { type: 'context_usage'; data: ContextUsage }
+  | { type: 'thinking_delta' | 'message_delta'; chunk: string }
+  | { type: 'tool_start' | 'tool_end'; toolName: string; toolArgs?: Record<string, unknown>; output?: string }
+  | { type: 'todos_updated'; todos: ApiTodo[] }
+  | { type: 'finding'; data: ApiFinding }
+  | { type: 'tool_use' | 'tool_result'; toolName: string; args?: any; result?: any }
+  | { type: 'error'; message: string; errors?: string[] }
+  | { type: 'session_complete' | 'session_cancelled'; reportId?: string; tokensUsed?: number; iterations?: number }
+  | { type: 'scope_review_required' | 'scope_review_updated' | 'scope_review_applied'; data: any }
+  | { type: 'context_compaction_started' | 'context_compacted'; data: any }
+  | { type: 'findings_agent_status'; status: string; queue_depth: number; jobs_processed: number; created_count: number; updated_count: number; message?: string }
+  | { type: 'agent_spawned' | 'agent_status'; data: any }
+  | { type: 'tool_approval_required'; tool: string; requestId: string }
+  | { type: 'system.message'; message: string; event: string; level: string; data?: any };
+
+export type SwarmEventType = SwarmEventPayload['type'];
+
+export type SwarmEvent = {
+  [K in SwarmEventType]: SwarmEventEnvelope<Extract<SwarmEventPayload, { type: K }>>;
+}[SwarmEventType];
+
+// ============================================
+// Dashboard Types
+// ============================================
+
+export interface DashboardStats {
+  activeScans: number;
+  queuedScans: number;
+  completedScans: number;
+  riskScore: number;
+  totalAssets: number;
+  coverage: number;
+  totalFindings: number;
+newFindingsToday: number;
 }
 
-export interface SSEPhaseChangeEvent extends SSEEvent {
-  type: 'phase_change';
-  data: {
-    phase: ApiPentestPhase;
-  };
+export interface ActivityEvent {
+ id: string;
+ timestamp: Date;
+ type: 'scan_started' | 'scan_progress' | 'finding' | 'scan_completed' | 'agent_action' | 'error';
+ title: string;
+ description?: string;
+ severity?: 'critical' | 'high' | 'medium' | 'low' | 'info';
+ scanId?: string;
+ scanName?: string;
+ progress?: number;
 }
 
-export interface SSEFindingEvent extends SSEEvent {
-  type: 'finding';
-  data: ApiFinding;
+export interface ScanHistoryItem {
+ id: string;
+ name: string;
+ target: string;
+ status: 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+ startedAt: Date;
+ duration: number;
+ findings: number;
+ severity: {
+critical: number;
+   high: number;
+   medium: number;
+   low: number;
+ };
 }
 
-export interface SSEErrorEvent extends SSEEvent {
-  type: 'error';
-  data: {
-    message: string;
-    errors?: string[];
-  };
-}
-
-export interface SSESessionCompleteEvent extends SSEEvent {
-  type: 'session_complete';
-  data: {
-    reportId?: string;
-    tokensUsed?: number;
-    iterations?: number;
-  };
-}
-
-export interface SSEFindingsAgentStatusEvent extends SSEEvent {
-  type: 'findings_agent_status';
-  data: {
-    status: 'idle' | 'queued' | 'processing' | 'error';
-    queue_depth: number;
-    jobs_processed: number;
-    created_count: number;
-    updated_count: number;
-    last_action?: 'created' | 'updated';
-    last_finding_title?: string;
-    last_activity_at?: string;
-    current_stage?: FindingsAgentStage;
-    active_job_id?: string;
-    candidate_title?: string;
-    progress_pct?: number;
-    verification_step?: string;
-    message?: string;
-    timestamp?: number;
-  };
-}
-
-export interface SSEContextUsageEvent extends SSEEvent {
-  type: 'context_usage';
-  data: ContextUsage;
+export interface TrendDataPoint {
+ date: string;
+ findings: number;
+ resolved: number;
+ riskScore: number;
 }

@@ -23,6 +23,8 @@ import { AnthropicClient } from './ai/AnthropicClient.js';
 import { ZhipuClient } from './ai/ZhipuClient.js';
 import { GeminiClient } from './ai/GeminiClient.js';
 import { AntigravityClient } from './ai/AntigravityClient.js';
+import { CodexClient } from './ai/CodexClient.js';
+import { OpenCodeClient } from './ai/OpenCodeClient.js';
 import { kaliMcpClient, type ToolExecutionContext } from './mcp/KaliMCPClient.js';
 import { providerManager } from './ProviderManager.js';
 import { sseManager, type SSEManager } from './SSEManager.js';
@@ -612,8 +614,13 @@ export class FindingsAgent {
   ): void {
     const metrics = this.getMetrics(pentestId);
     this.sse.broadcast(pentestId, {
-      type: 'findings_agent_status',
-      data: {
+      runId: pentestId,
+      source: 'system',
+      audience: 'internal',
+      surfaceHint: 'activity',
+      eventType: 'findings_agent_status',
+      payload: {
+        type: 'findings_agent_status',
         status,
         queue_depth: (this.queues.get(pentestId) || []).length,
         jobs_processed: metrics.jobsProcessed,
@@ -847,6 +854,10 @@ export class FindingsAgent {
           throw new Error('Antigravity provider requires OAuth login before use.');
         }
         return new AntigravityClient(oauthToken);
+      case 'CODEX':
+        return new CodexClient(apiKey, baseUrl || undefined);
+      case 'OPENCODE':
+        return new OpenCodeClient(apiKey, baseUrl || undefined);
       default:
         if (baseUrl) return new ZhipuClient(apiKey, baseUrl, 'custom');
         return new AnthropicClient(apiKey);
@@ -858,21 +869,21 @@ export class FindingsAgent {
       case 'zhipu':
         return 'glm-4.7';
       case 'openai':
-        return 'gpt-4o';
+        return 'gpt-4o-2024-11-20';
       case 'gemini':
-        return 'gemini-2.5-pro';
+        return 'gemini-2.5-pro-preview-03-25';
       case 'antigravity':
         return 'antigravity-gemini-3-pro';
       case 'anthropic':
       default:
-        return 'claude-sonnet-4-20250514';
+        return 'claude-sonnet-4-6';
     }
   }
 
   private resolveThinkingBudget(modelId: string, rawBudget?: number): number | undefined {
     if (!Number.isFinite(rawBudget) || Number(rawBudget) <= 0) return undefined;
     const modelStr = String(modelId || '').toLowerCase();
-    const supports = /^glm-(5|4\.7|4\.6|4\.5v?|4\.5)\b/i.test(modelStr) || modelStr.includes('thinking');
+    const supports = /^glm-(5|4\.7|4\.6|4\.5v?|4\.5)\b/i.test(modelStr) || modelStr.includes('thinking') || modelStr.includes('gemini') || modelStr.includes('antigravity');
     if (!supports) return undefined;
     const rounded = Math.round(Number(rawBudget));
     return Math.max(0, Math.min(50000, rounded));
@@ -1313,8 +1324,15 @@ export class FindingsAgent {
     stage: FindingsAgentStage
   ): void {
     this.sse.broadcast(finding.pentest_id, {
-      type: 'finding',
-      data: this.toSSEFindingPayload(finding, action, stage),
+      runId: finding.pentest_id,
+      source: 'agent',
+      audience: 'internal',
+      surfaceHint: 'activity',
+      eventType: 'finding',
+      payload: {
+        type: 'finding',
+        ...this.toSSEFindingPayload(finding, action, stage)
+      },
     });
   }
 

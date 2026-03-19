@@ -1,0 +1,280 @@
+{
+  "config": {
+    "configFile": "/Users/aris/Documents/LEA/backend/e2e/playwright.config.ts",
+    "rootDir": "/Users/aris/Documents/LEA/backend/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-103350/playwright/results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/aris/Documents/LEA/backend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "swarm-runtime.spec.ts",
+          "swarm-reduced-motion.spec.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-103350/playwright/html-report",
+          "open": "never"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-103350/playwright/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "swarm-runtime.spec.ts",
+      "file": "swarm-runtime.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "scenario mode renders a Nia-only reply with a calm center thread",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 30753,
+                  "error": {
+                    "message": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}",
+                    "stack": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}\n    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:60:11)\n    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:15:19",
+                    "location": {
+                      "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                      "column": 11,
+                      "line": 60
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:60\n\n  58 |   }));\n  59 |   if (!response.ok()) {\n> 60 |     throw new Error(`createPentest failed: ${response.status()} ${await response.text()}`);\n     |           ^\n  61 |   }\n  62 |   const body = await response.json();\n  63 |   return {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                        "column": 11,
+                        "line": 60
+                      },
+                      "message": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}\n\n\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:60\n\n  58 |   }));\n  59 |   if (!response.ok()) {\n> 60 |     throw new Error(`createPentest failed: ${response.status()} ${await response.text()}`);\n     |           ^\n  61 |   }\n  62 |   const body = await response.json();\n  63 |   return {\n\u001b[2m    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:60:11)\u001b[22m\n\u001b[2m    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:15:19\u001b[22m"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-09T09:34:03.603Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-103350/playwright/results/swarm-runtime-scenario-mod-6997d-y-with-a-calm-center-thread/test-failed-1.png"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                    "column": 11,
+                    "line": 60
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "26f0cd50de1ec3d2a6da-8a290f8c7ba17042c1eb",
+          "file": "swarm-runtime.spec.ts",
+          "line": 14,
+          "column": 1
+        },
+        {
+          "title": "scenario mode approval path shows approval, review linkage, and approve flow",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 30542,
+                  "error": {
+                    "message": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}",
+                    "stack": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}\n    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:60:11)\n    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:37:19",
+                    "location": {
+                      "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                      "column": 11,
+                      "line": 60
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:60\n\n  58 |   }));\n  59 |   if (!response.ok()) {\n> 60 |     throw new Error(`createPentest failed: ${response.status()} ${await response.text()}`);\n     |           ^\n  61 |   }\n  62 |   const body = await response.json();\n  63 |   return {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                        "column": 11,
+                        "line": 60
+                      },
+                      "message": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}\n\n\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:60\n\n  58 |   }));\n  59 |   if (!response.ok()) {\n> 60 |     throw new Error(`createPentest failed: ${response.status()} ${await response.text()}`);\n     |           ^\n  61 |   }\n  62 |   const body = await response.json();\n  63 |   return {\n\u001b[2m    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:60:11)\u001b[22m\n\u001b[2m    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:37:19\u001b[22m"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-09T09:34:35.660Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-103350/playwright/results/swarm-runtime-scenario-mod-36022-ew-linkage-and-approve-flow/test-failed-1.png"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                    "column": 11,
+                    "line": 60
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "26f0cd50de1ec3d2a6da-8406b03cf5ec9aa3005a",
+          "file": "swarm-runtime.spec.ts",
+          "line": 36,
+          "column": 1
+        },
+        {
+          "title": "scenario mode deny path preserves calm center thread and bounded left rail",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 30666,
+                  "error": {
+                    "message": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}",
+                    "stack": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}\n    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:60:11)\n    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:63:19",
+                    "location": {
+                      "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                      "column": 11,
+                      "line": 60
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:60\n\n  58 |   }));\n  59 |   if (!response.ok()) {\n> 60 |     throw new Error(`createPentest failed: ${response.status()} ${await response.text()}`);\n     |           ^\n  61 |   }\n  62 |   const body = await response.json();\n  63 |   return {"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                        "column": 11,
+                        "line": 60
+                      },
+                      "message": "Error: createPentest failed: 500 {\"statusCode\":500,\"error\":\"Internal Server Error\",\"message\":\"\\nInvalid `fastify.prisma.pentest.create()` invocation in\\n/Users/aris/Documents/LEA/backend/src/routes/pentests.ts:361:52\\n\\n  358   defaultPercent: 100,\\n  359 });\\n  360 \\n→ 361 const pentest = await fastify.prisma.pentest.create(\\nCan't reach database server at `localhost:5433`\\n\\nPlease make sure your database server is running at `localhost:5433`.\"}\n\n\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:60\n\n  58 |   }));\n  59 |   if (!response.ok()) {\n> 60 |     throw new Error(`createPentest failed: ${response.status()} ${await response.text()}`);\n     |           ^\n  61 |   }\n  62 |   const body = await response.json();\n  63 |   return {\n\u001b[2m    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:60:11)\u001b[22m\n\u001b[2m    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:63:19\u001b[22m"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-09T09:35:07.323Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-103350/playwright/results/swarm-runtime-scenario-mod-03846-hread-and-bounded-left-rail/test-failed-1.png"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                    "column": 11,
+                    "line": 60
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "26f0cd50de1ec3d2a6da-53f3e6d4195634c3dc87",
+          "file": "swarm-runtime.spec.ts",
+          "line": 62,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-09T09:34:02.708Z",
+    "duration": 95731.335,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 3,
+    "flaky": 0
+  }
+}

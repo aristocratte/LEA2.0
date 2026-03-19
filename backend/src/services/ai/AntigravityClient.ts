@@ -5,7 +5,8 @@ import {
     ChatMessage,
     ContentBlock,
     ToolDefinition,
-    AgentEvent
+    AgentEvent,
+    toAbortSignal,
 } from './AIClient.js';
 import { ANTIGRAVITY_ENDPOINT, refreshAccessToken } from './antigravity/oauth.js';
 
@@ -238,15 +239,24 @@ export class AntigravityClient implements AIClient {
         ];
         const uniqueEndpoints = [...new Set(endpoints)];
 
+        const generationConfig: Record<string, unknown> = { maxOutputTokens: maxTokens };
+        if (typeof params.thinkingBudget === 'number' && Number.isFinite(params.thinkingBudget)) {
+            const normalizedBudget = Math.trunc(params.thinkingBudget);
+            if (normalizedBudget !== 0) {
+                generationConfig.thinkingConfig = {
+                    includeThoughts: true,
+                    thinkingBudget: normalizedBudget,
+                };
+            }
+        }
+
         const requestBody: any = {
             project: this.projectId,
             model: model,
             request: {
                 model: model,
                 contents: this.toGeminiContents(messages),
-                generationConfig: {
-                    maxOutputTokens: maxTokens,
-                }
+                generationConfig
             }
         };
 
@@ -272,7 +282,7 @@ export class AntigravityClient implements AIClient {
                     ...this.getAntigravityHeaders(),
                 },
                 body: JSON.stringify(requestBody),
-                signal: signal as any,
+                signal: toAbortSignal(signal),
             });
 
             if (attempt.ok) {

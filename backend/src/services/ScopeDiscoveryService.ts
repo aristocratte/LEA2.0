@@ -2,6 +2,12 @@ import net from 'node:net';
 import { PrismaClient } from '@prisma/client';
 import { kaliMcpClient } from './mcp/KaliMCPClient.js';
 import { ScopeRecommendationService, type ScopeRecommendationSignal } from './ScopeRecommendationService.js';
+import {
+  parseOptionalJsonWithSchema,
+  scopeProposalCandidateEvidenceSchema,
+  scopeProposalSummarySchema,
+  toPrismaJson,
+} from '../types/schemas.js';
 
 const prisma = new PrismaClient();
 
@@ -326,14 +332,14 @@ export class ScopeDiscoveryService {
         base_target: baseDomain,
         source: 'WHOIS_ORG_CORRELATION',
         status: 'PENDING',
-        summary: summary as any,
+        summary: toPrismaJson(summary),
         candidates: {
           create: candidates.map((candidate) => ({
             domain: candidate.domain,
             confidence: candidate.confidence,
             recommended: candidate.recommended,
             recommendation_reason: candidate.recommendation_reason,
-            evidence: candidate.evidence as any,
+            evidence: toPrismaJson(candidate.evidence),
             decision: 'PENDING',
           })),
         },
@@ -352,7 +358,7 @@ export class ScopeDiscoveryService {
         base_target: proposalRecord.base_target,
         source: proposalRecord.source,
         status: proposalRecord.status,
-        summary: proposalRecord.summary as Record<string, unknown> | null,
+        summary: parseOptionalJsonWithSchema(scopeProposalSummarySchema, proposalRecord.summary) ?? null,
         decided_at: proposalRecord.decided_at ? proposalRecord.decided_at.toISOString() : null,
         created_at: proposalRecord.created_at.toISOString(),
         updated_at: proposalRecord.updated_at.toISOString(),
@@ -363,7 +369,7 @@ export class ScopeDiscoveryService {
           confidence: candidate.confidence,
           recommended: candidate.recommended,
           recommendation_reason: candidate.recommendation_reason,
-          evidence: candidate.evidence as Record<string, unknown> | null,
+          evidence: parseOptionalJsonWithSchema(scopeProposalCandidateEvidenceSchema, candidate.evidence) ?? null,
           decision: candidate.decision,
           decided_at: candidate.decided_at ? candidate.decided_at.toISOString() : null,
           created_at: candidate.created_at.toISOString(),
@@ -676,7 +682,7 @@ export class ScopeDiscoveryService {
         data: {
           description: params.description,
           evidence: params.evidence,
-          metadata: params.metadata as any,
+          metadata: toPrismaJson(params.metadata),
           tool_used: 'whois/amass/crt.sh',
           phase_name: 'RECON_PASSIVE',
         },
@@ -692,7 +698,7 @@ export class ScopeDiscoveryService {
         category: 'Asset Intelligence',
         description: params.description,
         evidence: params.evidence,
-        metadata: params.metadata as any,
+        metadata: toPrismaJson(params.metadata),
         status: 'OPEN',
         verified: true,
         false_positive: false,

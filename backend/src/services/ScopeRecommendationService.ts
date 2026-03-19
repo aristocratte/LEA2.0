@@ -3,6 +3,8 @@ import { AnthropicClient } from './ai/AnthropicClient.js';
 import { ZhipuClient } from './ai/ZhipuClient.js';
 import { GeminiClient } from './ai/GeminiClient.js';
 import { AntigravityClient } from './ai/AntigravityClient.js';
+import { CodexClient } from './ai/CodexClient.js';
+import { OpenCodeClient } from './ai/OpenCodeClient.js';
 import { providerManager } from './ProviderManager.js';
 
 export interface ScopeRecommendationSignal {
@@ -190,6 +192,10 @@ export class ScopeRecommendationService {
           throw new Error('Antigravity provider requires OAuth login before use.');
         }
         return new AntigravityClient(oauthToken);
+      case 'CODEX':
+        return new CodexClient(apiKey, baseUrl || undefined);
+      case 'OPENCODE':
+        return new OpenCodeClient(apiKey, baseUrl || undefined);
       default:
         if (baseUrl) {
           return new ZhipuClient(apiKey, baseUrl, 'custom');
@@ -204,14 +210,14 @@ export class ScopeRecommendationService {
       case 'zhipu':
         return 'glm-4.7';
       case 'openai':
-        return 'gpt-4o';
+        return 'gpt-4o-2024-11-20';
       case 'gemini':
-        return 'gemini-2.5-pro';
+        return 'gemini-2.5-pro-preview-03-25';
       case 'antigravity':
         return 'antigravity-gemini-3-pro';
       case 'anthropic':
       default:
-        return 'claude-sonnet-4-20250514';
+        return 'claude-sonnet-4-6';
     }
   }
 

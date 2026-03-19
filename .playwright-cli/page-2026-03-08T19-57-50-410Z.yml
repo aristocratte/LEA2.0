@@ -1,0 +1,80 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e9]:
+            - paragraph [ref=e10]: LEA Platform
+            - text: Pentest Workspace
+        - navigation [ref=e11]:
+          - link "Pentest" [ref=e12] [cursor=pointer]:
+            - /url: /pentest
+          - link "Providers" [ref=e13] [cursor=pointer]:
+            - /url: /providers
+          - link "Reports" [ref=e14] [cursor=pointer]:
+            - /url: /reports
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - text: Minimal control surface
+          - button [ref=e20]:
+            - img [ref=e21]
+    - main [ref=e24]:
+      - generic [ref=e27]:
+        - generic [ref=e33]:
+          - heading "Configure Intelligence" [level=1] [ref=e87]
+          - paragraph [ref=e35]: Tune the engine for depth and cognitive allocation.
+        - generic [ref=e88]:
+          - generic [ref=e89]:
+            - button "Quick pass 10-25 min" [ref=e90]:
+              - img [ref=e91]
+              - generic [ref=e93]: Quick pass
+              - generic [ref=e94]: 10-25 min
+            - button "Balanced 25-45 min" [ref=e95]:
+              - img [ref=e96]
+              - generic [ref=e98]: Balanced
+              - generic [ref=e99]: 25-45 min
+            - button "Deep dive 35-70+ min" [ref=e100]:
+              - img [ref=e101]
+              - generic [ref=e103]: Deep dive
+              - generic [ref=e104]: 35-70+ min
+          - generic [ref=e105]:
+            - generic [ref=e106]:
+              - img [ref=e107]
+              - generic [ref=e115]: Engine Configuration
+            - generic [ref=e116]:
+              - generic [ref=e117]:
+                - generic [ref=e118]: AI Provider
+                - combobox [ref=e119]:
+                  - option "Default Engine"
+                  - option "Google Gemini"
+                  - option "Zhipu AI"
+                  - option "OpenAI"
+                  - option "Anthropic" [selected]
+              - generic [ref=e120]:
+                - generic [ref=e121]: Model
+                - combobox [ref=e122]:
+                  - option "System Default"
+                  - option "Claude 3 Opus" [selected]
+                  - option "Claude 3 Sonnet"
+                  - option "Claude 3 Haiku"
+            - generic [ref=e123]:
+              - generic [ref=e124]:
+                - generic [ref=e125]: Deep Thinking Allocation
+                - generic [ref=e126]: 12000 tk
+              - generic [ref=e127]:
+                - button "Off" [ref=e128]
+                - button "Light" [ref=e129]
+                - button "Standard" [ref=e130]
+                - button "Intensive" [ref=e131]
+        - generic [ref=e39]:
+          - button "Back" [ref=e84]:
+            - img [ref=e85]
+            - text: Back
+          - button "Launch Swarm" [active] [ref=e132]:
+            - img [ref=e133]
+            - text: Launch Swarm
+  - button "Open Next.js Dev Tools" [ref=e48] [cursor=pointer]:
+    - img [ref=e49]
+  - alert [ref=e52]

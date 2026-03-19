@@ -91,6 +91,14 @@ export interface StreamChatParams {
     signal?: AbortSignal;
 }
 
+export function toAbortSignal(signal?: AbortSignal): AbortSignal | undefined {
+    return signal ? (signal as unknown as AbortSignal) : undefined;
+}
+
+export function asAsyncIterable<T>(value: AsyncIterable<T> | unknown): AsyncIterable<T> {
+    return value as AsyncIterable<T>;
+}
+
 // ============================================
 // AIClient Interface
 // ============================================

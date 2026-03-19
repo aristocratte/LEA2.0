@@ -21,6 +21,7 @@ import type {
     ToolUseContent,
     ToolResultContent,
 } from './AIClient.js';
+import { toAbortSignal } from './AIClient.js';
 
 const ZHIPU_BASE_URL = 'https://api.z.ai/api/paas/v4';
 
@@ -112,7 +113,7 @@ export class ZhipuClient implements AIClient {
                 'Authorization': `Bearer ${this.apiKey}`,
             },
             body: JSON.stringify(body),
-            signal: signal as any,
+            signal: toAbortSignal(signal),
         });
 
         if (!response.ok) {

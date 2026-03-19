@@ -135,6 +135,10 @@ async function requestJson<T>(pathname: string, options: RequestOptions = {}): P
   if (!finalHeaders.has('Accept')) {
     finalHeaders.set('Accept', 'application/json');
   }
+  const apiKey = process.env.NEXT_PUBLIC_LEA_API_KEY;
+  if (apiKey && !finalHeaders.has('Authorization')) {
+    finalHeaders.set('Authorization', `Bearer ${apiKey}`);
+  }
   if (body !== undefined && !finalHeaders.has('Content-Type')) {
     finalHeaders.set('Content-Type', 'application/json');
   }
@@ -171,10 +175,24 @@ function unwrapData<T>(payload: T | ApiEnvelope<T>): T {
   return payload as T;
 }
 
-export function getStreamUrl(pentestId: string, lastEventId?: number): string {
-  const query: QueryParams = {};
+function normalizeLastEventCursor(lastEventId?: string | number | null): string | undefined {
+  if (typeof lastEventId === 'string') {
+    const trimmed = lastEventId.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
   if (typeof lastEventId === 'number' && Number.isFinite(lastEventId) && lastEventId > 0) {
-    query.lastEventId = Math.floor(lastEventId);
+    return String(Math.floor(lastEventId));
+  }
+
+  return undefined;
+}
+
+export function getStreamUrl(pentestId: string, lastEventId?: string | number | null): string {
+  const query: QueryParams = {};
+  const normalizedCursor = normalizeLastEventCursor(lastEventId);
+  if (normalizedCursor) {
+    query.lastEventId = normalizedCursor;
   }
 
   return buildUrl(
@@ -184,10 +202,11 @@ export function getStreamUrl(pentestId: string, lastEventId?: number): string {
   );
 }
 
-export function getSwarmStreamUrl(pentestId: string, lastEventId?: number): string {
+export function getSwarmStreamUrl(pentestId: string, lastEventId?: string | number | null): string {
   const query: QueryParams = {};
-  if (typeof lastEventId === 'number' && Number.isFinite(lastEventId) && lastEventId > 0) {
-    query.lastEventId = Math.floor(lastEventId);
+  const normalizedCursor = normalizeLastEventCursor(lastEventId);
+  if (normalizedCursor) {
+    query.lastEventId = normalizedCursor;
   }
 
   return buildUrl(
@@ -197,9 +216,17 @@ export function getSwarmStreamUrl(pentestId: string, lastEventId?: number): stri
   );
 }
 
+export function getSwarmReportPdfUrl(pentestId: string): string {
+  return buildUrl(`/api/pentests/${encodeURIComponent(pentestId)}/swarm/report.pdf`);
+}
+
 export const pentestsApi = {
   list(params?: { status?: string; limit?: number; offset?: number }) {
     return requestJson<ApiEnvelope<ApiPentest[]>>('/api/pentests', { query: params });
+  },
+
+  get(pentestId: string) {
+    return requestJson<ApiEnvelope<ApiPentest>>(`/api/pentests/${encodeURIComponent(pentestId)}`);
   },
 
   create(payload: CreatePentestRequest) {
@@ -300,6 +327,45 @@ export const pentestsApi = {
     );
   },
 
+  controlSwarmRuntime(
+    pentestId: string,
+    payload: {
+      action: 'pause' | 'resume' | 'step' | 'jump_to_sequence' | 'jump_to_correlation';
+      sequence?: number;
+      correlationId?: string;
+    },
+  ) {
+    return requestJson<ApiEnvelope<SwarmRun | null>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/runtime/control`,
+      { method: 'POST', body: payload },
+    );
+  },
+
+  listSwarmTraces(pentestId: string) {
+    return requestJson<ApiEnvelope<unknown[]>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/traces`,
+    );
+  },
+
+  getSwarmTrace(traceId: string) {
+    return requestJson<ApiEnvelope<unknown>>(
+      `/api/swarm/traces/${encodeURIComponent(traceId)}`,
+    );
+  },
+
+  async submitApproval(pentestId: string, eventId: string, decision: 'approved' | 'denied') {
+    const route = decision === 'approved' ? 'approve' : 'deny';
+    return requestJson<ApiEnvelope<unknown>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/tools/${route}`,
+      {
+        method: 'POST',
+        body: decision === 'approved'
+          ? { approvalId: eventId }
+          : { approvalId: eventId, reason: 'Denied by operator' },
+      }
+    );
+  },
+
   pause(pentestId: string) {
     return requestJson<ApiEnvelope<{ status: string }>>(
       `/api/pentests/${encodeURIComponent(pentestId)}/pause`,
@@ -349,6 +415,16 @@ export const pentestsApi = {
     return requestJson<ApiEnvelope<ApiMessage[]>>(
       `/api/pentests/${encodeURIComponent(pentestId)}/messages`,
       { query: params }
+    );
+  },
+
+  createMessage(
+    pentestId: string,
+    payload: { type?: string; content: string; agent_role?: string }
+  ) {
+    return requestJson<ApiEnvelope<ApiMessage>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/messages`,
+      { method: 'POST', body: payload }
     );
   },
 
@@ -459,5 +535,64 @@ export const providersApi = {
     await requestJson<void>(`/api/providers/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
+  },
+
+  async testConnection(id: string): Promise<{ success: boolean; latency?: number; error?: string; models_available?: string[] }> {
+    return requestJson<{ success: boolean; latency?: number; error?: string; models_available?: string[] }>(
+      `/api/providers/${encodeURIComponent(id)}/test`,
+      { method: 'POST' }
+    );
+  },
+
+  async connectOAuth(providerType: 'anthropic' | 'gemini' | 'antigravity'): Promise<{ url: string; message: string }> {
+    return requestJson<{ url: string; message: string }>(
+      `/api/providers/oauth/${providerType}`,
+      { method: 'POST' }
+    );
+  },
+};
+
+export const reportsApi = {
+  list(params?: { page?: number; limit?: number; status?: string; severity?: string; search?: string; sortBy?: string; order?: string }) {
+    return requestJson<{
+      data: Array<{
+        id: string;
+        pentest_id: string;
+        title: string;
+        status: 'DRAFT' | 'COMPLETE' | 'ARCHIVED';
+        created_at: string;
+        updated_at: string;
+        completed_at?: string;
+        executive_summary?: string;
+        template: string;
+        confidential: boolean;
+        findingsCount: number;
+        maxSeverity: string | null;
+        pentest?: { target: string };
+        _count?: { findings: number };
+      }>;
+      meta: { total: number; page: number; limit: number; totalPages: number };
+    }>('/api/reports', { query: params });
+  },
+
+  get(id: string) {
+    return requestJson<ApiEnvelope<ApiReport>>(`/api/reports/${encodeURIComponent(id)}`);
+  },
+
+  update(id: string, data: { title?: string; executive_summary?: string; methodology?: string; scope_description?: string; status?: string; confidential?: boolean }) {
+    return requestJson<ApiEnvelope<ApiReport>>(`/api/reports/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: data,
+    });
+  },
+
+  delete(id: string) {
+    return requestJson<void>(`/api/reports/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  exportJson(id: string) {
+    return requestJson<unknown>(`/api/reports/${encodeURIComponent(id)}/export/json`);
   },
 };

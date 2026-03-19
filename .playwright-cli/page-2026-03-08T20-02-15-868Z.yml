@@ -1,0 +1,147 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img [ref=e7]
+          - generic [ref=e9]:
+            - paragraph [ref=e10]: LEA Platform
+            - text: Pentest Workspace
+        - navigation [ref=e11]:
+          - link "Pentest" [ref=e12] [cursor=pointer]:
+            - /url: /pentest
+          - link "Providers" [ref=e13] [cursor=pointer]:
+            - /url: /providers
+          - link "Reports" [ref=e14] [cursor=pointer]:
+            - /url: /reports
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - img [ref=e17]
+            - text: Minimal control surface
+          - button [ref=e20]:
+            - img [ref=e21]
+    - main [ref=e24]:
+      - generic [ref=e147]:
+        - generic [ref=e148]:
+          - generic [ref=e149]:
+            - paragraph [ref=e150]: Session
+            - generic [ref=e151]:
+              - generic [ref=e152]:
+                - generic [ref=e153]:
+                  - paragraph [ref=e154]: Navigation first
+                  - paragraph [ref=e155]: Keep the center thread reserved for orchestration voice and decision-grade changes.
+                - img [ref=e156]
+              - generic [ref=e159]:
+                - generic [ref=e160]:
+                  - paragraph [ref=e161]: Agents
+                  - paragraph [ref=e162]: "3"
+                  - paragraph [ref=e163]: 2 active
+                - generic [ref=e164]:
+                  - paragraph [ref=e165]: Findings
+                  - paragraph [ref=e166]: "0"
+                  - paragraph [ref=e167]: COMPLETED
+          - generic [ref=e168]:
+            - paragraph [ref=e169]: Panels
+            - generic [ref=e170]:
+              - generic [ref=e171]:
+                - generic [ref=e172]:
+                  - paragraph [ref=e173]: Conversation
+                  - paragraph [ref=e174]: 2 center items
+                - img [ref=e175]
+              - generic [ref=e178]:
+                - generic [ref=e179]:
+                  - paragraph [ref=e180]: Signals
+                  - paragraph [ref=e181]: 3 latest items
+                - img [ref=e182]
+              - generic [ref=e185]:
+                - generic [ref=e186]:
+                  - paragraph [ref=e187]: Inspector
+                  - paragraph [ref=e188]: Open
+                - img [ref=e189]
+          - generic [ref=e192]:
+            - generic [ref=e193]:
+              - paragraph [ref=e194]: Latest Signals
+              - generic [ref=e195]: "3"
+            - generic [ref=e196]:
+              - generic [ref=e478] [cursor=pointer]:
+                - img [ref=e480]
+                - generic [ref=e482]:
+                  - generic [ref=e483]: httpx triage sweep
+                  - generic [ref=e484]:
+                    - generic [ref=e485]: running
+                    - generic [ref=e486]: •
+                    - generic [ref=e487]: Recon
+              - generic [ref=e490] [cursor=pointer]:
+                - img [ref=e492]
+                - generic [ref=e494]:
+                  - generic [ref=e495]: nuclei template pass
+                  - generic [ref=e496]:
+                    - generic [ref=e497]: running
+                    - generic [ref=e498]: •
+                    - generic [ref=e499]: Validation
+              - generic [ref=e502] [cursor=pointer]:
+                - img [ref=e504]
+                - generic [ref=e507]:
+                  - generic [ref=e508]: Terminal trace condensed into review pane
+                  - generic [ref=e509]:
+                    - generic [ref=e510]: completed
+                    - generic [ref=e511]: •
+                    - generic [ref=e512]: Ops
+        - generic [ref=e198]:
+          - generic [ref=e199]:
+            - generic [ref=e200]:
+              - img [ref=e202]
+              - generic [ref=e205]:
+                - generic [ref=e206]:
+                  - text: Nia Orchestrator
+                  - generic [ref=e207]: v1.0
+                - generic [ref=e208]:
+                  - generic [ref=e210]: System Live
+                  - generic [ref=e211]: "Target: api.example.com"
+            - button [ref=e213]:
+              - img [ref=e214]
+          - generic [ref=e220]:
+            - generic [ref=e513]:
+              - img [ref=e515]
+              - generic [ref=e518]:
+                - generic [ref=e519]:
+                  - generic [ref=e520]: Orchestrator
+                  - generic [ref=e521]: 20:58
+                - generic [ref=e522]: I am running the noisy evidence work in the side rail while keeping this thread limited to what changes direction or operator intent.
+            - generic [ref=e523]:
+              - img [ref=e525]
+              - button "Strategy Note Parallel probes are converging on the same auth surface. I am keeping tool chatter out of the center thread and holding only the decision-grade deltas here. Expand" [ref=e538]:
+                - generic [ref=e539]:
+                  - generic [ref=e540]:
+                    - generic [ref=e542]: Strategy Note
+                    - paragraph [ref=e543]: Parallel probes are converging on the same auth surface. I am keeping tool chatter out of the center thread and holding only the decision-grade deltas here.
+                  - generic [ref=e544]: Expand
+          - generic [ref=e232]:
+            - textbox "Message Nia to alter strategy or approve actions..." [ref=e233]
+            - button [disabled] [ref=e234]:
+              - img [ref=e235]
+        - generic [ref=e415]:
+          - generic [ref=e416]:
+            - heading "Inspector" [level=3] [ref=e417]:
+              - img [ref=e418]
+              - text: Inspector
+            - button [ref=e420]:
+              - img [ref=e421]
+          - generic [ref=e425]:
+            - button "Summary" [ref=e426]: Summary
+            - button "Advanced" [ref=e428]
+          - generic [ref=e430]:
+            - generic [ref=e431]:
+              - heading "Event Details" [level=4] [ref=e432]
+              - generic [ref=e433]:
+                - generic [ref=e434]: httpx triage sweep
+                - generic [ref=e435]: 2026-03-08T20:00:29.534Z
+            - generic [ref=e436]:
+              - heading "Summary" [level=4] [ref=e437]
+              - generic [ref=e438]: Headers, redirects, and exposed hosts condensed for inspection.
+            - generic [ref=e545]:
+              - heading "Output Preview" [level=4] [ref=e546]
+              - generic [ref=e548]: 200 api.example.com 302 login.example.com -> auth.example.com
+  - button "Open Next.js Dev Tools" [ref=e48] [cursor=pointer]:
+    - img [ref=e49]
+  - alert [ref=e52]

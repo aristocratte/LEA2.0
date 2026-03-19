@@ -1,0 +1,71 @@
+[
+  {
+    "correlationId": "msg-delegation-intro",
+    "count": 1,
+    "eventTypes": [
+      "assistant.message.done"
+    ],
+    "startSequence": 2,
+    "endSequence": 2
+  },
+  {
+    "correlationId": "corr-thinking",
+    "count": 1,
+    "eventTypes": [
+      "thinking.summary.done"
+    ],
+    "startSequence": 3,
+    "endSequence": 3
+  },
+  {
+    "correlationId": "corr-agent-recon",
+    "count": 2,
+    "eventTypes": [
+      "agent.spawning",
+      "agent.completed"
+    ],
+    "startSequence": 4,
+    "endSequence": 11
+  },
+  {
+    "correlationId": "corr-terminal-curl",
+    "count": 3,
+    "eventTypes": [
+      "terminal.stream.started",
+      "terminal.stream.delta",
+      "terminal.stream.done"
+    ],
+    "startSequence": 5,
+    "endSequence": 8
+  },
+  {
+    "correlationId": "corr-tool-httpx",
+    "count": 3,
+    "eventTypes": [
+      "tool.call.started",
+      "artifact.created",
+      "tool.call.completed"
+    ],
+    "startSequence": 6,
+    "endSequence": 10
+  },
+  {
+    "correlationId": "approval-sensitive-sqlmap",
+    "count": 2,
+    "eventTypes": [
+      "approval.requested",
+      "approval.resolved"
+    ],
+    "startSequence": 12,
+    "endSequence": 13
+  },
+  {
+    "correlationId": "msg-approval-approved",
+    "count": 1,
+    "eventTypes": [
+      "assistant.message.done"
+    ],
+    "startSequence": 14,
+    "endSequence": 14
+  }
+]

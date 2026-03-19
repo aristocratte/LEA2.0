@@ -1,0 +1,352 @@
+{
+  "config": {
+    "configFile": "/Users/aris/Documents/LEA/backend/e2e/playwright.config.ts",
+    "rootDir": "/Users/aris/Documents/LEA/backend/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 2
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-101004/playwright",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 2
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/aris/Documents/LEA/backend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "swarm-runtime.spec.ts",
+          "swarm-reduced-motion.spec.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-101004/playwright/html-report",
+          "open": "never"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-101004/playwright/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 5,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "swarm-reduced-motion.spec.ts",
+      "file": "swarm-reduced-motion.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "replay mode honors reduced motion while keeping review linkage intact",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 303,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m\n    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:40:25)\n    at /Users/aris/Documents/LEA/backend/e2e/swarm-reduced-motion.spec.ts:16:25",
+                    "location": {
+                      "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                      "column": 25,
+                      "line": 40
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:40\n\n  38 |     },\n  39 |   });\n> 40 |   expect(response.ok()).toBeTruthy();\n     |                         ^\n  41 |   const body = await response.json();\n  42 |   return {\n  43 |     id: body.data.id,"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                        "column": 25,
+                        "line": 40
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m\n\n\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:40\n\n  38 |     },\n  39 |   });\n> 40 |   expect(response.ok()).toBeTruthy();\n     |                         ^\n  41 |   const body = await response.json();\n  42 |   return {\n  43 |     id: body.data.id,\n\u001b[2m    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:40:25)\u001b[22m\n\u001b[2m    at /Users/aris/Documents/LEA/backend/e2e/swarm-reduced-motion.spec.ts:16:25\u001b[22m"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-09T09:10:15.065Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-101004/playwright/swarm-reduced-motion-repla-33314-eping-review-linkage-intact/test-failed-1.png"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                    "column": 25,
+                    "line": 40
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "c2c7a42cdd15374bfaf4-499bf0942c5ccd3bb89a",
+          "file": "swarm-reduced-motion.spec.ts",
+          "line": 15,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "swarm-runtime.spec.ts",
+      "file": "swarm-runtime.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "scenario mode renders a Nia-only reply with a calm center thread",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 1,
+                  "status": "failed",
+                  "duration": 303,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m\n    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:40:25)\n    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:15:19",
+                    "location": {
+                      "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                      "column": 25,
+                      "line": 40
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:40\n\n  38 |     },\n  39 |   });\n> 40 |   expect(response.ok()).toBeTruthy();\n     |                         ^\n  41 |   const body = await response.json();\n  42 |   return {\n  43 |     id: body.data.id,"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                        "column": 25,
+                        "line": 40
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m\n\n\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:40\n\n  38 |     },\n  39 |   });\n> 40 |   expect(response.ok()).toBeTruthy();\n     |                         ^\n  41 |   const body = await response.json();\n  42 |   return {\n  43 |     id: body.data.id,\n\u001b[2m    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:40:25)\u001b[22m\n\u001b[2m    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:15:19\u001b[22m"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-09T09:10:15.066Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-101004/playwright/swarm-runtime-scenario-mod-6997d-y-with-a-calm-center-thread/test-failed-1.png"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                    "column": 25,
+                    "line": 40
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "26f0cd50de1ec3d2a6da-8a290f8c7ba17042c1eb",
+          "file": "swarm-runtime.spec.ts",
+          "line": 14,
+          "column": 1
+        },
+        {
+          "title": "scenario mode approval path shows approval, review linkage, and approve flow",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 88,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m\n    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:40:25)\n    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:37:19",
+                    "location": {
+                      "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                      "column": 25,
+                      "line": 40
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:40\n\n  38 |     },\n  39 |   });\n> 40 |   expect(response.ok()).toBeTruthy();\n     |                         ^\n  41 |   const body = await response.json();\n  42 |   return {\n  43 |     id: body.data.id,"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                        "column": 25,
+                        "line": 40
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m\n\n\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:40\n\n  38 |     },\n  39 |   });\n> 40 |   expect(response.ok()).toBeTruthy();\n     |                         ^\n  41 |   const body = await response.json();\n  42 |   return {\n  43 |     id: body.data.id,\n\u001b[2m    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:40:25)\u001b[22m\n\u001b[2m    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:37:19\u001b[22m"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-09T09:10:16.526Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-101004/playwright/swarm-runtime-scenario-mod-36022-ew-linkage-and-approve-flow/test-failed-1.png"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                    "column": 25,
+                    "line": 40
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "26f0cd50de1ec3d2a6da-8406b03cf5ec9aa3005a",
+          "file": "swarm-runtime.spec.ts",
+          "line": 36,
+          "column": 1
+        },
+        {
+          "title": "scenario mode deny path preserves calm center thread and bounded left rail",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 94,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m\n    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:40:25)\n    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:63:19",
+                    "location": {
+                      "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                      "column": 25,
+                      "line": 40
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:40\n\n  38 |     },\n  39 |   });\n> 40 |   expect(response.ok()).toBeTruthy();\n     |                         ^\n  41 |   const body = await response.json();\n  42 |   return {\n  43 |     id: body.data.id,"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                        "column": 25,
+                        "line": 40
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeTruthy\u001b[2m()\u001b[22m\n\nReceived: \u001b[31mfalse\u001b[39m\n\n\u001b[90m   at \u001b[39mhelpers/swarmRuntime.ts:40\n\n  38 |     },\n  39 |   });\n> 40 |   expect(response.ok()).toBeTruthy();\n     |                         ^\n  41 |   const body = await response.json();\n  42 |   return {\n  43 |     id: body.data.id,\n\u001b[2m    at createPentest (/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts:40:25)\u001b[22m\n\u001b[2m    at /Users/aris/Documents/LEA/backend/e2e/swarm-runtime.spec.ts:63:19\u001b[22m"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-03-09T09:10:17.419Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/aris/Documents/LEA/output/ci-runtime/20260309-101004/playwright/swarm-runtime-scenario-mod-03846-hread-and-bounded-left-rail/test-failed-1.png"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/aris/Documents/LEA/backend/e2e/helpers/swarmRuntime.ts",
+                    "column": 25,
+                    "line": 40
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "26f0cd50de1ec3d2a6da-53f3e6d4195634c3dc87",
+          "file": "swarm-runtime.spec.ts",
+          "line": 62,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-09T09:10:11.736Z",
+    "duration": 6120.683,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 4,
+    "flaky": 0
+  }
+}

@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { Provider, ModelConfig, ApiProvider } from '@/types';
-import { mockProviders } from '@/lib/mock-data';
 import { providersApi } from '@/lib/api';
 
 interface ProviderState {
@@ -38,9 +37,8 @@ function fromApiProvider(apiProvider: ApiProvider): Provider {
     displayName: apiProvider.display_name || apiProvider.name,
     enabled: apiProvider.enabled ?? true,
     apiKey: '', // Never populate with masked hash - user must enter a new key
-    apiKeyConfigured:
-      !!apiProvider.api_key_hash ||
-      ((apiProvider.type === 'ANTIGRAVITY' || apiProvider.type === 'GEMINI') && !!apiProvider.oauth_configured),
+    apiKeyConfigured: !!apiProvider.api_key_hash,
+    oauthConfigured: !!apiProvider.oauth_configured,
     baseUrl: apiProvider.base_url,
     organizationId: apiProvider.organization_id,
     models: (apiProvider.models || []).map((m): ModelConfig => ({
@@ -78,7 +76,7 @@ function toApiProvider(provider: Partial<Provider>): Record<string, unknown> {
     name: provider.name,
     type: provider.type?.toUpperCase(),
     display_name: provider.displayName,
-    api_key: provider.apiKey,
+    api_key: provider.apiKey || undefined,
     base_url: provider.baseUrl,
     enabled: provider.enabled,
     is_default: provider.isDefault,
@@ -92,19 +90,24 @@ function toApiProvider(provider: Partial<Provider>): Record<string, unknown> {
 }
 
 export const useProviderStore = create<ProviderState>((set, get) => ({
-  providers: mockProviders,
-  selectedProviderId: 'anthropic',
+  providers: [],
+  selectedProviderId: null,
   isLoading: false,
   error: null,
 
   selectProvider: (id) => set({ selectedProviderId: id }),
 
-  toggleProvider: (id) =>
+  toggleProvider: (id) => {
+    const current = get().providers.find(p => p.id === id);
+    if (!current) return;
     set((state) => ({
       providers: state.providers.map((p) =>
         p.id === id ? { ...p, enabled: !p.enabled } : p
       ),
-    })),
+    }));
+    // Persist to API (fire and forget)
+    providersApi.update(id, { enabled: !current.enabled }).catch(console.error);
+  },
 
   addModel: (providerId, model) =>
     set((state) => ({
@@ -161,14 +164,14 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       const providers = await providersApi.list();
       const convertedProviders = providers.map(fromApiProvider);
       set({
-        providers: convertedProviders.length > 0 ? convertedProviders : mockProviders,
+        providers: convertedProviders,
         isLoading: false,
       });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to fetch providers',
         isLoading: false,
-        providers: mockProviders, // Fallback to mock data
+        providers: [],
       });
     }
   },

@@ -1,5 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import { kaliMcpClient } from '../mcp/KaliMCPClient.js';
+import {
+  parseJsonWithSchema,
+  contextSnapshotSummarySchema,
+  toPrismaJson,
+} from '../../types/schemas.js';
 
 export type ContextCompactionTrigger = 'PHASE_END' | 'URGENT' | 'ERROR_RECOVERY' | 'MANUAL';
 
@@ -152,7 +157,7 @@ export class ContextCompactionService {
         phase_from: input.phaseFrom || delta.pentest.phase || null,
         phase_to: input.phaseTo || delta.pentest.phase || null,
         summary_markdown: markdown,
-        summary_json: summaryJson as any,
+        summary_json: toPrismaJson(summaryJson),
         workspace_file: workspaceFile || null,
         archived_until_message_seq: archivedUntilMessageSeq,
         archived_until_tool_ts: archivedUntilToolTs,
@@ -181,7 +186,7 @@ export class ContextCompactionService {
         phase_from: created.phase_from,
         phase_to: created.phase_to,
         summary_markdown: created.summary_markdown,
-        summary_json: (created.summary_json || {}) as Record<string, unknown>,
+        summary_json: parseJsonWithSchema(contextSnapshotSummarySchema, created.summary_json, {}),
         workspace_file: created.workspace_file,
         archived_until_message_seq: created.archived_until_message_seq,
         archived_until_tool_ts: created.archived_until_tool_ts
@@ -610,4 +615,3 @@ export class ContextCompactionService {
       .slice(0, Math.max(1, Math.min(limit, 20)));
   }
 }
-

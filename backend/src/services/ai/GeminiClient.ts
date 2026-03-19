@@ -9,6 +9,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { toAbortSignal } from './AIClient.js';
 import type {
     AIClient,
     StreamChatParams,
@@ -558,7 +559,7 @@ export class GeminiClient implements AIClient {
                             method: 'POST',
                             headers: this.getDefaultHeaders(candidateModel, accessToken),
                             body: JSON.stringify(codeAssistBody),
-                            signal: signal as any,
+                            signal: toAbortSignal(signal),
                         });
 
                         if (res.ok) {
@@ -624,7 +625,7 @@ export class GeminiClient implements AIClient {
                 method: 'POST',
                 headers: this.getDefaultHeaders(model),
                 body: JSON.stringify(body),
-                signal: signal as any,
+                signal: toAbortSignal(signal),
             });
         }
 

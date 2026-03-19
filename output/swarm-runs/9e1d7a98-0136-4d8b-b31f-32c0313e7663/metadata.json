@@ -1,0 +1,21 @@
+{
+  "traceId": "9e1d7a98-0136-4d8b-b31f-32c0313e7663",
+  "pentestId": "d534606f-a5e6-4865-88fa-8d5f8b708540",
+  "mode": "scenario_capture",
+  "scenarioId": "multi-agent-approval",
+  "status": "completed",
+  "storagePath": "/Users/aris/Documents/LEA/output/swarm-runs/9e1d7a98-0136-4d8b-b31f-32c0313e7663",
+  "eventCount": 15,
+  "createdAt": "2026-03-08T22:01:20.129Z",
+  "metadata": {
+    "title": "Multi-Agent Approval",
+    "tags": [
+      "delegation",
+      "approval",
+      "artifact"
+    ]
+  },
+  "completedAt": "2026-03-08T22:01:20.646Z",
+  "validationPath": "/Users/aris/Documents/LEA/output/swarm-runs/9e1d7a98-0136-4d8b-b31f-32c0313e7663/validation.json",
+  "correlationPath": "/Users/aris/Documents/LEA/output/swarm-runs/9e1d7a98-0136-4d8b-b31f-32c0313e7663/correlations.json"
+}

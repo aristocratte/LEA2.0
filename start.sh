@@ -1,191 +1,310 @@
 #!/bin/bash
 # LEA AI Platform — Script de démarrage
-# Usage: ./start.sh [--rebuild] [--help]
+# Mode DEV par défaut : Docker pour postgres + kali-mcp, npm run dev local pour backend + frontend
+# Usage: ./start.sh [--prod] [--rebuild] [--help]
 
 set -uo pipefail
 
+# Toujours exécuter depuis le répertoire du script
+cd "$(dirname "$0")"
+
 # ── Couleurs ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-CYAN='\033[0;36m'; BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
+CYAN='\033[0;36m'; BLUE='\033[0;34m'; MAGENTA='\033[0;35m'; BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
 
-ok()   { echo -e "${GREEN}  ✓${NC} $*"; }
-err()  { echo -e "${RED}  ✗${NC} $*" >&2; }
-info() { echo -e "${CYAN}  →${NC} $*"; }
-step() { echo -e "\n${BOLD}── $* ──${NC}\n"; }
+ok()    { printf "${GREEN}✓${NC} %s\n" "$*"; }
+err()   { printf "${RED}✗${NC} %s\n" "$*" >&2; }
+info()  { printf "${CYAN}→${NC} %s\n" "$*"; }
+step()  { printf "${DIM}⏳ %s...${NC}\n" "$*"; }   # "wait" est un builtin bash réservé
+warn()  { printf "${YELLOW}⚠${NC} %s\n" "$*"; }
+rebuild_msg() { printf "${MAGENTA}↻${NC} %s\n" "$*"; }
 
-# ── Config ────────────────────────────────────────────────────────────────────
-export COMPOSE_PROJECT_NAME="lea"
-
-compose() { docker compose "$@"; }
+# ── Pids des process locaux ───────────────────────────────────────────────────
+BACKEND_PID=""
+FRONTEND_PID=""
 
 # ── Arguments ─────────────────────────────────────────────────────────────────
+MODE="dev"      # dev | prod
 REBUILD=false
 for arg in "$@"; do
   case $arg in
-    --rebuild|-r) REBUILD=true ;;
+    --prod|-p)     MODE="prod" ;;
+    --rebuild|-r)  REBUILD=true ;;
     --help|-h)
-      echo "Usage: ./start.sh [--rebuild]"
-      echo "  --rebuild   Force la reconstruction des images Docker"
+      echo "Usage: ./start.sh [--prod] [--rebuild]"
+      echo ""
+      echo "  (défaut)    Mode DEV — infra Docker, backend+frontend en npm run dev"
+      echo "  --prod      Mode PROD — tout en Docker (rebuild image si --rebuild)"
+      echo "  --rebuild   Force rebuild des images Docker (mode prod uniquement)"
       exit 0 ;;
   esac
 done
 
-# ── Ctrl+C ────────────────────────────────────────────────────────────────────
+# ── Cleanup ───────────────────────────────────────────────────────────────────
 cleanup() {
-  echo ""
-  info "Arrêt des conteneurs..."
-  compose down 2>/dev/null || true
-  ok "Au revoir !"
+  printf "\n${DIM}Arrêt des services...${NC}\n"
+  # Tuer les process locaux si mode dev
+  [ -n "$BACKEND_PID" ]  && kill "$BACKEND_PID"  2>/dev/null || true
+  [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
+  # Arrêt Docker
+  if [ "$MODE" = "prod" ]; then
+    docker compose down 2>/dev/null || true
+  else
+    docker compose stop postgres lea-kali-mcp 2>/dev/null || true
+  fi
+  printf "${GREEN}✓${NC} Services arrêtés. Au revoir !\n"
   exit 0
 }
-trap cleanup SIGINT SIGTERM
+trap cleanup SIGINT SIGTERM EXIT
 
 # ── Banner ────────────────────────────────────────────────────────────────────
-echo ""
-echo -e "${BOLD}╔══════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║   LEA AI Platform                        ║${NC}"
-echo -e "${BOLD}╚══════════════════════════════════════════╝${NC}"
-echo ""
+printf "\n${BOLD}${BLUE}╔══════════════════════════════════════════╗${NC}\n"
+printf "${BOLD}${BLUE}║   🛡️  LEA AI Platform                     ║${NC}\n"
+if [ "$MODE" = "dev" ]; then
+  printf "${BOLD}${BLUE}║   %-40s ║${NC}\n" "mode DEV — hot-reload actif"
+else
+  printf "${BOLD}${BLUE}║   %-40s ║${NC}\n" "mode PROD — images Docker"
+fi
+printf "${BOLD}${BLUE}╚══════════════════════════════════════════╝${NC}\n\n"
 
 # ── 1. Docker ─────────────────────────────────────────────────────────────────
-step "Docker"
-
+step "Vérification Docker"
 if ! docker info &>/dev/null; then
-  err "Docker Desktop n'est pas lancé. Démarrez-le d'abord."
+  err "Docker Desktop n'est pas lancé"
   exit 1
 fi
 ok "Docker actif"
 
 # ── 2. Fichier .env ───────────────────────────────────────────────────────────
 if [ ! -f ".env" ]; then
-  step "Configuration"
+  step "Création .env depuis .env.example"
   if [ -f ".env.example" ]; then
     cp .env.example .env
     KEY=$(openssl rand -hex 32 2>/dev/null || echo "0000000000000000000000000000000000000000000000000000000000000000")
     sed -i.bak "s/CHANGE_THIS_TO_64_HEX_CHARACTERS/$KEY/g" .env && rm -f .env.bak
-    ok ".env créé"
+    ok ".env créé avec clé générée"
   else
-    err ".env introuvable."
+    err ".env.example introuvable — créer .env manuellement et relancer"
     exit 1
   fi
 fi
 
-# ── 3. Démarrage ──────────────────────────────────────────────────────────────
-step "Démarrage"
+# ── 3. Charger .env pour les process locaux ───────────────────────────────────
+set -a
+# shellcheck disable=SC1091
+[ -f ".env" ] && source .env
+set +a
 
-if [ "$REBUILD" = true ]; then
-  info "Reconstruction forcée des images..."
-  compose build --no-cache
-  ok "Images reconstruites"
-fi
-
-# Arrêt propre de l'ancien état Compose (évite les containers fantômes)
-info "Nettoyage..."
-# Force-remove any stale containers tracked by this project (handles ghost container IDs)
-docker ps -aq --filter "label=com.docker.compose.project=lea" | xargs docker rm -f 2>/dev/null || true
-compose down --remove-orphans 2>/dev/null || true
-
-# Detect Docker daemon state corruption: containers visible in ps -a but not operable
-GHOST_IDS=$(docker ps -aq 2>/dev/null)
-if [ -n "$GHOST_IDS" ]; then
-  CORRUPT=false
-  for cid in $GHOST_IDS; do
-    if ! docker inspect "$cid" &>/dev/null; then
-      CORRUPT=true
-      break
-    fi
-  done
-  if [ "$CORRUPT" = true ]; then
-    echo ""
-    err "État du démon Docker corrompu (containers fantômes non supprimables)."
-    echo -e "  ${YELLOW}→ Veuillez redémarrer Docker Desktop, puis relancer ./start.sh${NC}"
-    echo ""
-    exit 1
-  fi
-fi
-
-info "Lancement des services..."
-compose up -d --build 2>&1 | grep -v "^WARN"
-
-# Vérifier que les containers tournent réellement
-sleep 3
-FAILED=""
-for svc in postgres lea-kali-mcp backend frontend pgadmin; do
-  container=$(compose ps -q "$svc" 2>/dev/null)
-  if [ -z "$container" ]; then
-    FAILED="$FAILED $svc"
-    continue
-  fi
-  state=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "missing")
-  if [ "$state" != "running" ]; then
-    FAILED="$FAILED $svc"
-  fi
-done
-
-if [ -n "$FAILED" ]; then
-  err "Services non démarrés :$FAILED"
-  compose ps
-  exit 1
-fi
-ok "Services démarrés"
-
-# ── 4. Health checks ──────────────────────────────────────────────────────────
-step "Health checks"
-
+# ── Helper : health check avec retry ─────────────────────────────────────────
 wait_for() {
-  local name="$1" svc="$2" cmd="$3" max="${4:-60}"
+  local name="$1" cmd="$2" max="${3:-60}"
   local i=0
-  while [ $i -lt $max ]; do
+  step "$name"
+  while [ "$i" -lt "$max" ]; do
     if eval "$cmd" &>/dev/null; then
-      printf "\r%60s\r" ""
       ok "$name prêt"
       return 0
     fi
-    # Le container a crashé ?
-    container=$(compose ps -q "$svc" 2>/dev/null)
-    if [ -n "$container" ]; then
-      state=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "absent")
-      if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
-        printf "\r%60s\r" ""
-        err "$name a crashé !"
-        compose logs --tail=20 "$svc" 2>&1 | sed "s/^/  /"
-        return 1
-      fi
-    fi
-    printf "\r  ${DIM}Attente de $name... ${i}/${max}s${NC}"
     sleep 1; i=$((i + 1))
   done
-  printf "\r%60s\r" ""
-  err "$name n'a pas répondu après ${max}s"
-  compose logs --tail=20 "$svc" 2>&1 | sed "s/^/  /"
+  err "$name timeout après ${max}s"
   return 1
 }
 
-wait_for "PostgreSQL" "postgres" \
-  "compose exec -T postgres pg_isready -U lea_admin" 30 || exit 1
+# ── Migrations Prisma ─────────────────────────────────────────────────────────
+run_migrations() {
+  step "Migrations Prisma"
+  if (cd backend && npx prisma migrate deploy 2>&1); then
+    ok "Migrations appliquées"
+  else
+    info "Migrations : base déjà à jour ou pas de migration en attente"
+  fi
+}
 
-wait_for "Kali MCP" "lea-kali-mcp" \
-  "curl -sf --max-time 2 http://localhost:3002/health" 90 || exit 1
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE DEV — infra Docker, app en local
+# ══════════════════════════════════════════════════════════════════════════════
+if [ "$MODE" = "dev" ]; then
 
-wait_for "Backend" "backend" \
-  "curl -sf --max-time 2 http://localhost:3001/health" 60 || exit 1
+  # ── Dépendances node ────────────────────────────────────────────────────────
+  if [ ! -d "backend/node_modules" ]; then
+    step "Installation dépendances backend"
+    (cd backend && npm install --silent) && ok "backend node_modules prêt"
+  fi
+  if [ ! -d "lea-app/node_modules" ]; then
+    step "Installation dépendances frontend"
+    (cd lea-app && npm install --silent) && ok "lea-app node_modules prêt"
+  fi
 
-wait_for "Frontend" "frontend" \
-  "curl -sf --max-time 2 http://localhost:3000" 60 || exit 1
+  # ── Démarrage infra Docker (postgres + kali-mcp seulement) ─────────────────
+  step "Démarrage infra Docker (postgres + kali-mcp)"
+  if ! docker compose up -d postgres lea-kali-mcp; then
+    err "Échec du démarrage de l'infra Docker"
+    exit 1
+  fi
 
-# ── 5. Résumé ─────────────────────────────────────────────────────────────────
-echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${GREEN}✓ LEA est opérationnelle !${NC}"
-echo ""
-echo -e "  Frontend  →  ${BOLD}http://localhost:3000${NC}"
-echo -e "  Backend   →  ${BOLD}http://localhost:3001${NC}"
-echo -e "  Kali MCP  →  ${BOLD}http://localhost:3002${NC}"
-echo -e "  PgAdmin   →  ${BOLD}http://localhost:5050${NC}"
-echo ""
-echo -e "  ${DIM}Ctrl+C pour arrêter${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
+  wait_for "PostgreSQL" "docker compose exec -T postgres pg_isready -U ${POSTGRES_USER:-lea_admin}" 30 || exit 1
+  run_migrations
+  wait_for "Kali MCP" "curl -sf --max-time 2 http://localhost:3002/health" 90 || exit 1
 
-# ── 6. Logs ───────────────────────────────────────────────────────────────────
-compose logs -f --tail=30
+  # ── Backend local ────────────────────────────────────────────────────────────
+  step "Démarrage backend (npm run dev)"
+  (cd backend && npm run dev > ../logs/backend-dev.log 2>&1) &
+  BACKEND_PID=$!
+  wait_for "Backend API" "curl -sf --max-time 2 http://localhost:3001/health" 60 || {
+    err "Backend n'a pas démarré — voir logs/backend-dev.log"
+    exit 1
+  }
+
+  # ── Frontend local ───────────────────────────────────────────────────────────
+  step "Démarrage frontend (npm run dev)"
+  (cd lea-app && npm run dev > ../logs/frontend-dev.log 2>&1) &
+  FRONTEND_PID=$!
+  wait_for "Frontend" "curl -sf --max-time 2 http://localhost:3000" 90 || {
+    err "Frontend n'a pas démarré — voir logs/frontend-dev.log"
+    exit 1
+  }
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE PROD — tout en Docker
+# ══════════════════════════════════════════════════════════════════════════════
+else
+
+  if [ "$REBUILD" = true ]; then
+    rebuild_msg "Rebuild des images Docker..."
+    if ! docker compose build --no-cache backend frontend; then
+      err "Échec du build"
+      exit 1
+    fi
+    ok "Images reconstruites"
+  fi
+
+  step "Arrêt des containers existants"
+  EXISTING=$(docker ps -aq --filter "label=com.docker.compose.project=lea" 2>/dev/null || true)
+  if [ -n "$EXISTING" ]; then
+    # shellcheck disable=SC2086
+    docker stop $EXISTING 2>/dev/null || true
+  fi
+
+  step "Lancement de tous les services"
+  if ! docker compose up -d; then
+    err "Échec du lancement — vérifier docker-compose.yml"
+    exit 1
+  fi
+  sleep 2
+
+  wait_for "PostgreSQL" "docker compose exec -T postgres pg_isready -U ${POSTGRES_USER:-lea_admin}" 30 || exit 1
+  run_migrations
+  wait_for "Kali MCP"  "curl -sf --max-time 2 http://localhost:3002/health" 90 || exit 1
+  wait_for "Backend"   "curl -sf --max-time 2 http://localhost:3001/health"  60 || exit 1
+  wait_for "Frontend"  "curl -sf --max-time 2 http://localhost:3000"          60 || exit 1
+
+fi
+
+# ── Résumé ─────────────────────────────────────────────────────────────────────
+printf "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+printf "  ${GREEN}✓ LEA est opérationnelle !${NC}\n\n"
+printf "  ${BOLD}Frontend${NC}   http://localhost:3000\n"
+printf "  ${BOLD}Backend${NC}    http://localhost:3001\n"
+printf "  ${BOLD}Kali MCP${NC}   http://localhost:3002\n"
+printf "  ${BOLD}PgAdmin${NC}    http://localhost:5050\n"
+if [ "$MODE" = "dev" ]; then
+  printf "\n  ${DIM}Logs : logs/backend-dev.log | logs/frontend-dev.log${NC}\n"
+fi
+printf "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+# ── Menu interactif ────────────────────────────────────────────────────────────
+show_menu() {
+  printf "\n${BOLD}Que souhaitez-vous faire ?${NC}\n"
+  if [ "$MODE" = "dev" ]; then
+    printf "  ${MAGENTA}[r]${NC} Redémarrer backend local\n"
+    printf "  ${MAGENTA}[f]${NC} Redémarrer frontend local\n"
+    printf "  ${MAGENTA}[m]${NC} Appliquer les migrations Prisma\n"
+    printf "  ${MAGENTA}[lb]${NC} Logs backend\n"
+    printf "  ${MAGENTA}[lf]${NC} Logs frontend\n"
+    printf "  ${MAGENTA}[ld]${NC} Logs Docker (infra)\n"
+  else
+    printf "  ${MAGENTA}[1]${NC} Rebuild frontend\n"
+    printf "  ${MAGENTA}[2]${NC} Rebuild backend\n"
+    printf "  ${MAGENTA}[3]${NC} Rebuild les deux\n"
+    printf "  ${MAGENTA}[m]${NC} Appliquer les migrations Prisma\n"
+    printf "  ${MAGENTA}[l]${NC} Voir les logs\n"
+  fi
+  printf "  ${MAGENTA}[s]${NC} Status containers\n"
+  printf "  ${MAGENTA}[q]${NC} Quitter\n"
+  printf "\nChoix : "
+}
+
+restart_backend_local() {
+  [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
+  step "Redémarrage backend"
+  (cd backend && npm run dev > ../logs/backend-dev.log 2>&1) &
+  BACKEND_PID=$!
+  wait_for "Backend API" "curl -sf --max-time 2 http://localhost:3001/health" 60
+}
+
+restart_frontend_local() {
+  [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
+  step "Redémarrage frontend"
+  (cd lea-app && npm run dev > ../logs/frontend-dev.log 2>&1) &
+  FRONTEND_PID=$!
+  wait_for "Frontend" "curl -sf --max-time 2 http://localhost:3000" 90
+}
+
+rebuild_frontend_docker() {
+  rebuild_msg "Rebuild frontend Docker..."
+  docker compose build --no-cache frontend && \
+  docker compose up -d --no-deps --force-recreate frontend && \
+  ok "Frontend rebuildé"
+}
+
+rebuild_backend_docker() {
+  rebuild_msg "Rebuild backend Docker..."
+  docker compose build --no-cache backend && \
+  docker compose up -d --no-deps --force-recreate backend && \
+  ok "Backend rebuildé"
+}
+
+while true; do
+  show_menu
+  read -r choice
+
+  case "$choice" in
+    # Mode dev
+    r|R) [ "$MODE" = "dev" ] && restart_backend_local  || err "Option disponible en mode dev seulement" ;;
+    f|F) [ "$MODE" = "dev" ] && restart_frontend_local || err "Option disponible en mode dev seulement" ;;
+    lb)
+      printf "\n${CYAN}→ Logs backend (Ctrl+C pour revenir)${NC}\n"
+      tail -f logs/backend-dev.log 2>/dev/null || err "Fichier introuvable"
+      ;;
+    lf)
+      printf "\n${CYAN}→ Logs frontend (Ctrl+C pour revenir)${NC}\n"
+      tail -f logs/frontend-dev.log 2>/dev/null || err "Fichier introuvable"
+      ;;
+    ld)
+      printf "\n${CYAN}→ Logs Docker infra (Ctrl+C pour revenir)${NC}\n"
+      docker compose logs -f --tail=50 postgres lea-kali-mcp 2>&1
+      ;;
+    # Mode prod
+    1) [ "$MODE" = "prod" ] && rebuild_frontend_docker || err "Option disponible en mode prod seulement" ;;
+    2) [ "$MODE" = "prod" ] && rebuild_backend_docker  || err "Option disponible en mode prod seulement" ;;
+    3) [ "$MODE" = "prod" ] && { rebuild_frontend_docker && rebuild_backend_docker; } || err "Option disponible en mode prod seulement" ;;
+    l|L) [ "$MODE" = "prod" ] && docker compose logs -f --tail=50 2>&1 || err "Option disponible en mode prod seulement" ;;
+    # Commun
+    m|M) run_migrations ;;
+    s|S)
+      printf "\n${CYAN}Containers Docker :${NC}\n"
+      docker compose ps
+      if [ "$MODE" = "dev" ]; then
+        printf "\n${CYAN}Process locaux :${NC}\n"
+        [ -n "$BACKEND_PID" ]  && printf "  Backend  PID=${BACKEND_PID}\n"  || printf "  Backend  ${RED}arrêté${NC}\n"
+        [ -n "$FRONTEND_PID" ] && printf "  Frontend PID=${FRONTEND_PID}\n" || printf "  Frontend ${RED}arrêté${NC}\n"
+      fi
+      ;;
+    q|Q|quit|exit)
+      trap - EXIT   # évite double-cleanup sur exit normal
+      cleanup
+      ;;
+    *) err "Choix invalide" ;;
+  esac
+done

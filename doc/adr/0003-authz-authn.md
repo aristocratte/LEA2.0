@@ -1,76 +1,51 @@
 # ADR-0003 — AuthN/AuthZ pour Swarm & outils sensibles
 
-- **Statut**: Accepté (MVP + hardening progressif)
+- **Statut**: Accepte (MVP en mode trusted, hardening planifie)
 - **Date**: 2026-02-27
-- **Décideurs**: LEA core team
-- **Contexte lié**: `doc/lea2/non-functional.md`, `backend/src/services/mcp/*`
+- **Decideurs**: LEA core team
+- **Contexte lie**: `doc/lea2/non-functional.md`, `backend/src/services/mcp/*`, `backend/src/routes/swarm.ts`
 
 ## Contexte
-Le backend actuel est orienté environnement contrôlé (LAN/dev) avec CORS et sans couche IAM complète.
-Le Swarm introduit des actions sensibles:
-- exécution d’outils MCP potentiellement impactants,
-- push automatique dans SysReptor,
-- contrôle de run (pause/force-merge).
+Les actions Swarm sont sensibles (execution outils, pause/resume/merge, push SysReptor, export PDF).  
+L'ADR initiale decrivait un MVP protege par token + garde-fous operationnels.
 
-Il faut sécuriser le MVP sans bloquer la vélocité, puis permettre une montée en sécurité.
+## Etat reel implemente (code au 2026-02-27)
+1. Secrets cote backend:
+- Les cles providers restent cote serveur (`ProviderManager`, chiffrement via `CryptoService`).
+- Aucune cle sensible exposee par les routes swarm.
 
-## Options évaluées
-1. IAM complet (OIDC + RBAC complet) dès maintenant
-2. Mode MVP “single-operator” + garde-fous forts sur actions sensibles
-3. Aucune AuthN/AuthZ spécifique (rejeté)
+2. Controle scope outillage:
+- `KaliMCPClient` applique des verifications de scope (allow/deny/pending) avant execution outil.
+- Les commandes hors scope peuvent etre bloquees avec raison explicite.
 
-## Décision
-Nous retenons **Option 2**.
+3. Traçabilite technique:
+- Les executions outils swarm sont journalisees dans `ToolExecution`.
+- Le contexte acteur (`swarm:<role>`) est propage vers les executions MCP.
 
-## Politique retenue
+## Ecarts par rapport au plan initial (non implemente)
+1. Middleware AuthN API non applique:
+- Les routes critiques (`/swarm/start`, `/swarm/pause`, `/swarm/resume`, `/swarm/force-merge`) ne sont pas protegees par `Authorization: Bearer`.
+- `LEA_API_TOKEN` n'est pas enforce sur ces routes dans la version actuelle.
 
-### 1) AuthN API (MVP)
-- Le backend supporte un token d’API (`LEA_API_TOKEN`) côté serveur.
-- Les routes d’écriture critiques (`/swarm/start`, `/swarm/pause`, `/swarm/force-merge`, push report) requièrent `Authorization: Bearer <token>` hors mode dev.
-- Mode dev local explicitement autorisé via variable dédiée (`NODE_ENV=development`), mais non recommandé en staging/prod.
+2. AuthZ role-based non applique:
+- Pas de roles `operator/reviewer/system_agent` verifies server-side.
 
-### 2) AuthZ fonctionnelle
-Rôles logiques minimaux:
-- `operator`: lancer/piloter swarm, approuver tool sensible, pousser SysReptor.
-- `reviewer`: lecture seule (history, findings, PDF preview).
-- `system_agent`: rôle interne orchestration, permissions limitées.
+3. Workflow d'approbation outil sensible absent:
+- Pas d'evenement `tool_approval_required`,
+- pas d'endpoint d'approbation/refus avant execution.
 
-### 3) Confirmation explicite des tools sensibles (obligatoire)
-- Toute action MCP classée “sensible” passe par un mécanisme d’approbation explicite.
-- Le Swarm émet un événement `tool_approval_required` avec contexte (tool, cible, risque).
-- Sans approbation valide, exécution bloquée (`status=BLOCKED`) et audit log.
+4. Audit securite decisionnel incomplet:
+- Pas de journalisation standardisee `decision=APPROVED|DENIED|AUTO_BLOCKED` pour les outils sensibles.
 
-### 4) Auditabilité
-Chaque action sensible logue au minimum:
-- `timestamp`, `pentestId`, `swarmRunId`, `agentId`
-- `actor` (operator/system)
-- `tool`, `argumentsHash`, `decision` (`APPROVED|DENIED|AUTO_BLOCKED`)
-- `result` + `duration`
+## Decision operationnelle
+Maintenir temporairement un mode MVP en environnement controle, puis appliquer le hardening par phases.
 
-### 5) Gestion des secrets
-- Secrets (SysReptor, clés providers) exclusivement backend (.env/secret store).
-- Aucune exposition de token/API key au frontend.
+## Plan de hardening (prochaines etapes)
+1. Ajouter un middleware AuthN pour toutes les routes swarm d'ecriture.
+2. Introduire une couche AuthZ minimale (roles logiques) sur actions critiques.
+3. Ajouter le flux `tool_approval_required` + endpoints d'approbation.
+4. Etendre `KaliAuditLog` avec trace complete des decisions de securite.
 
-## Conséquences
-### Positives
-- Réduction immédiate du risque opérationnel sans implémenter un IAM lourd.
-- Traçabilité exploitable pour audit et conformité.
-- Compatible avec une future migration OIDC/RBAC complète.
-
-### Négatives / risques
-- Gestion de rôles simplifiée au MVP.
-- UX légèrement plus lourde à cause des confirmations manuelles.
-
-### Mitigations
-- UI claire des demandes d’approbation (one-click approve/deny + contexte).
-- Timeout configurable sur les demandes d’approbation.
-
-## Alternatives rejetées
-- **IAM complet immédiat**: trop coûteux pour le scope MVP.
-- **Aucune protection supplémentaire**: incompatible avec exigences sécurité Swarm.
-
-## Plan d’implémentation découlant de cette ADR
-1. Ajouter middleware auth sur routes swarm write.
-2. Introduire le flux `tool_approval_required` + endpoint d’approbation.
-3. Logger systématiquement approbations/refus dans `KaliAuditLog`.
-4. Documenter matrice de permissions dans README/SWARM_IMPLEMENTATION.
+## Risques residuels
+- En l'etat, exposition trop large si deploie hors environnement maitrise.
+- Absence d'approbation explicite pour certaines actions potentiellement impactantes.

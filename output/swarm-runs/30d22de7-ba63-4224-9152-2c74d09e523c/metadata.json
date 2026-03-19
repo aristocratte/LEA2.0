@@ -1,0 +1,17 @@
+{
+  "traceId": "30d22de7-ba63-4224-9152-2c74d09e523c",
+  "pentestId": "718dfef7-e768-46cd-8814-17e8cd491af6",
+  "mode": "scenario_capture",
+  "scenarioId": "nia-only-reply",
+  "status": "running",
+  "storagePath": "/Users/aris/Documents/LEA/output/swarm-runs/30d22de7-ba63-4224-9152-2c74d09e523c",
+  "eventCount": 3,
+  "createdAt": "2026-03-08T21:51:28.081Z",
+  "metadata": {
+    "title": "Nia Only Reply",
+    "tags": [
+      "nia",
+      "single-voice"
+    ]
+  }
+}

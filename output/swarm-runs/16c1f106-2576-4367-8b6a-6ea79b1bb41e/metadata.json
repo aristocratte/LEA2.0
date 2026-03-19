@@ -1,0 +1,16 @@
+{
+  "traceId": "16c1f106-2576-4367-8b6a-6ea79b1bb41e",
+  "pentestId": "2f5c0742-6708-47b2-8f90-38f047748cef",
+  "mode": "replay",
+  "sourceTraceId": "d4e51b7e-3f47-42d1-a681-022255d83648",
+  "status": "completed",
+  "storagePath": "/Users/aris/Documents/LEA/output/swarm-runs/16c1f106-2576-4367-8b6a-6ea79b1bb41e",
+  "eventCount": 15,
+  "createdAt": "2026-03-08T22:02:53.353Z",
+  "metadata": {
+    "replayTraceId": "d4e51b7e-3f47-42d1-a681-022255d83648"
+  },
+  "completedAt": "2026-03-08T22:02:53.431Z",
+  "validationPath": "/Users/aris/Documents/LEA/output/swarm-runs/16c1f106-2576-4367-8b6a-6ea79b1bb41e/validation.json",
+  "correlationPath": "/Users/aris/Documents/LEA/output/swarm-runs/16c1f106-2576-4367-8b6a-6ea79b1bb41e/correlations.json"
+}
