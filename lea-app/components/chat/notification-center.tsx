@@ -48,21 +48,11 @@ export function NotificationCenter({ className }: NotificationCenterProps) {
   const unreadLabel = unreadCount > 9 ? '9+' : String(unreadCount);
 
   function handleOpen() {
-    setOpen((prev) => {
-      if (!prev) {
-        // Will mark all as read when opening; update lastOpenedAt on open
-        return true;
-      }
-      return false;
-    });
-  }
-
-  // When the panel opens, record the open timestamp so items become "read"
-  useEffect(() => {
-    if (open) {
+    if (!open) {
       setLastOpenedAt(Date.now());
     }
-  }, [open]);
+    setOpen((prev) => !prev);
+  }
 
   function handleMarkAllRead() {
     setLastOpenedAt(Date.now());

@@ -51,6 +51,7 @@ export interface PentestConfig {
   outOfScope: string[];
   pentestType: PentestType;
   deepThinkingBudget: number;
+  reasoningEffort?: 'quick' | 'standard' | 'deep' | 'maximum';
   rules: EngagementRules;
 }
 
@@ -300,6 +301,8 @@ export interface ApiPentest {
   preflight_state?: PreflightState;
   preflight_summary?: PreflightResult | Record<string, unknown> | null;
   kali_workspace?: string | null;
+  failure_code?: string | null;
+  failure_reason?: string | null;
   started_at?: string;
   ended_at?: string;
   created_at: string;
@@ -580,6 +583,7 @@ export interface CreatePentestRequest {
     mcpServer?: string;
     timeout?: number;
     deepThinkingBudget?: number;
+    reasoningEffort?: 'quick' | 'standard' | 'deep' | 'maximum';
   };
   providerId?: string;
   modelId?: string;
@@ -702,15 +706,15 @@ export type SwarmEventPayload =
   | { type: 'tool_start' | 'tool_end'; toolName: string; toolArgs?: Record<string, unknown>; output?: string }
   | { type: 'todos_updated'; todos: ApiTodo[] }
   | { type: 'finding'; data: ApiFinding }
-  | { type: 'tool_use' | 'tool_result'; toolName: string; args?: any; result?: any }
+  | { type: 'tool_use' | 'tool_result'; toolName: string; args?: Record<string, unknown>; result?: unknown }
   | { type: 'error'; message: string; errors?: string[] }
   | { type: 'session_complete' | 'session_cancelled'; reportId?: string; tokensUsed?: number; iterations?: number }
-  | { type: 'scope_review_required' | 'scope_review_updated' | 'scope_review_applied'; data: any }
-  | { type: 'context_compaction_started' | 'context_compacted'; data: any }
+  | { type: 'scope_review_required' | 'scope_review_updated' | 'scope_review_applied'; data: unknown }
+  | { type: 'context_compaction_started' | 'context_compacted'; data: unknown }
   | { type: 'findings_agent_status'; status: string; queue_depth: number; jobs_processed: number; created_count: number; updated_count: number; message?: string }
-  | { type: 'agent_spawned' | 'agent_status'; data: any }
+  | { type: 'agent_spawned' | 'agent_status'; data: unknown }
   | { type: 'tool_approval_required'; tool: string; requestId: string }
-  | { type: 'system.message'; message: string; event: string; level: string; data?: any };
+  | { type: 'system.message'; message: string; event: string; level: string; data?: unknown };
 
 export type SwarmEventType = SwarmEventPayload['type'];
 
@@ -766,4 +770,24 @@ export interface TrendDataPoint {
  findings: number;
  resolved: number;
  riskScore: number;
+}
+
+// ============================================
+// Checkpoint Types
+// ============================================
+
+export type CheckpointTrigger = 'MANUAL' | 'PHASE_CHANGE' | 'PRE_REWIND' | 'ERROR_RECOVERY';
+
+export interface Checkpoint {
+  id: string;
+  pentest_id: string;
+  trigger: CheckpointTrigger;
+  label: string;
+  message_sequence: number;
+  pentest_phase: string;
+  finding_ids: string[];
+  todos_snapshot: Array<{ id: string; content: string; status: string; priority: number }>;
+  agents_snapshot: Array<{ agentId: string; role: string; status: string }>;
+  context_snapshot_id: string | null;
+  created_at: string;
 }

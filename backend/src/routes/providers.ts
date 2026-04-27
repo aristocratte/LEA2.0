@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { PrismaClient, ProviderType, Provider as PrismaProvider } from '@prisma/client';
 import { CryptoService } from '../services/CryptoService.js';
 import { providerManager } from '../services/ProviderManager.js';
+import { normalizeZaiBaseUrl, ZAI_CODING_PLAN_BASE_URL, ZAI_DEFAULT_MODELS } from '../services/ZaiModelCatalog.js';
 import type { FastifyRequestWithParams, FastifyRequestWithProviderUsageQuery } from '../types/fastify.d.js';
 
 const prisma = new PrismaClient();
@@ -39,6 +40,21 @@ const UpdateProviderSchema = z.object({
   priority: z.number().int().min(1).optional(),
   enabled: z.boolean().optional(),
 });
+
+function defaultBaseUrlForProvider(type: ProviderType | string): string | undefined {
+  return type === 'ZHIPU' ? ZAI_CODING_PLAN_BASE_URL : undefined;
+}
+
+function baseUrlForProvider(type: ProviderType | string, baseUrl?: string | null): string | null {
+  if (type === 'ZHIPU') {
+    return normalizeZaiBaseUrl(baseUrl);
+  }
+  return baseUrl || null;
+}
+
+function withoutTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, '');
+}
 
 function toPublicProvider(provider: any): any {
   // oauth_configured = true if any OAuth tokens are present
@@ -172,7 +188,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
         name: data.name,
         type: data.type,
         display_name: data.display_name,
-        base_url: data.base_url,
+        base_url: baseUrlForProvider(data.type, data.base_url ?? defaultBaseUrlForProvider(data.type)),
         is_default: data.is_default,
         priority: data.priority,
         enabled: data.enabled,
@@ -231,6 +247,8 @@ export async function providerRoutes(fastify: FastifyInstance) {
   // ========================================
   fastify.put('/api/providers/:id', async (request, reply) => {
     const { id } = request.params as FastifyRequestWithParams['params'];
+    const rawBody = request.body && typeof request.body === 'object' ? request.body as Record<string, unknown> : {};
+    const hasBaseUrlUpdate = Object.prototype.hasOwnProperty.call(rawBody, 'base_url');
     const data = UpdateProviderSchema.parse(request.body);
 
     // Try to find by id first, then by name
@@ -269,7 +287,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
           name,
           type,
           display_name: displayName,
-          base_url: data.base_url || null,
+          base_url: baseUrlForProvider(type, data.base_url ?? defaultBaseUrlForProvider(type)),
           is_default: data.is_default ?? false,
           priority: data.priority ?? 1,
           enabled: data.enabled ?? true,
@@ -297,7 +315,7 @@ export async function providerRoutes(fastify: FastifyInstance) {
       data: {
         ...(data.name && { name: data.name }),
         ...(data.display_name && { display_name: data.display_name }),
-        ...(data.base_url !== undefined && { base_url: data.base_url || null }),
+        ...(hasBaseUrlUpdate && { base_url: baseUrlForProvider(existing.type, data.base_url) }),
         ...(data.is_default !== undefined && { is_default: data.is_default }),
         ...(data.priority !== undefined && { priority: data.priority }),
         ...(data.enabled !== undefined && { enabled: data.enabled }),
@@ -665,13 +683,13 @@ async function testProviderConnection(
         break;
 
       case 'ZHIPU':
-        endpoint = 'https://api.z.ai/api/paas/v4/chat/completions';
+        endpoint = `${withoutTrailingSlash(normalizeZaiBaseUrl(baseUrl))}/chat/completions`;
         headers = {
           'authorization': `Bearer ${apiKey}`,
           'content-type': 'application/json',
         };
         body = JSON.stringify({
-          model: 'glm-4-flash',
+          model: 'glm-5.1',
           max_tokens: 10,
           messages: [{ role: 'user', content: 'Hi' }],
         });
@@ -715,6 +733,23 @@ async function testProviderConnection(
           'authorization': `Bearer ${apiKey}`,
         };
         break;
+      }
+
+      case 'ANTIGRAVITY': {
+        // Antigravity uses OAuth only — check if tokens are present
+        const hasAntigravityOAuth = provider?.oauth_refresh_token || provider?.oauth_access_token;
+        if (!hasAntigravityOAuth) {
+          return { success: false, error: 'No Antigravity OAuth credentials configured. Connect OAuth first.' };
+        }
+        return {
+          success: true,
+          models: [
+            'antigravity-gemini-3-pro',
+            'antigravity-gemini-3-flash',
+            'antigravity-claude-opus-4-6-thinking',
+            'antigravity-claude-sonnet-4-6',
+          ],
+        };
       }
 
       case 'CUSTOM':
@@ -764,6 +799,9 @@ async function createDefaultModels(providerId: string, type: ProviderType): Prom
     max_output_tokens: number;
     input_price_per_1k: number;
     output_price_per_1k: number;
+    supports_streaming?: boolean;
+    supports_vision?: boolean;
+    supports_tools?: boolean;
   }>> = {
     ANTHROPIC: [
       { model_id: 'claude-opus-4-6', display_name: 'Claude Opus 4.6', context_window: 200000, max_output_tokens: 32000, input_price_per_1k: 0.015, output_price_per_1k: 0.075 },
@@ -771,14 +809,12 @@ async function createDefaultModels(providerId: string, type: ProviderType): Prom
       { model_id: 'claude-sonnet-4-6', display_name: 'Claude Sonnet 4.6', context_window: 200000, max_output_tokens: 16000, input_price_per_1k: 0.003, output_price_per_1k: 0.015 },
       { model_id: 'claude-haiku-4-5-20251001', display_name: 'Claude Haiku 4.5', context_window: 200000, max_output_tokens: 8192, input_price_per_1k: 0.0008, output_price_per_1k: 0.004 },
     ],
-    ZHIPU: [
-      { model_id: 'glm-4.7', display_name: 'GLM-4.7 (flagship, thinking)', context_window: 200000, max_output_tokens: 8192, input_price_per_1k: 0.0005, output_price_per_1k: 0.0015 },
-      { model_id: 'glm-5', display_name: 'GLM-5 (agents/coding)', context_window: 128000, max_output_tokens: 8192, input_price_per_1k: 0.0008, output_price_per_1k: 0.002 },
-      { model_id: 'glm-4-plus', display_name: 'GLM-4 Plus', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0.0007, output_price_per_1k: 0.002 },
-      { model_id: 'glm-4-air', display_name: 'GLM-4 Air (fast)', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0.0001, output_price_per_1k: 0.0003 },
-      { model_id: 'glm-4-flash', display_name: 'GLM-4 Flash (free tier)', context_window: 128000, max_output_tokens: 4096, input_price_per_1k: 0, output_price_per_1k: 0 },
-    ],
+    ZHIPU: ZAI_DEFAULT_MODELS,
     OPENAI: [
+      { model_id: 'gpt-5.5', display_name: 'GPT-5.5', context_window: 1050000, max_output_tokens: 128000, input_price_per_1k: 0.005, output_price_per_1k: 0.03 },
+      { model_id: 'gpt-5.5-pro', display_name: 'GPT-5.5 Pro', context_window: 1050000, max_output_tokens: 128000, input_price_per_1k: 0.03, output_price_per_1k: 0.18 },
+      { model_id: 'gpt-5.4', display_name: 'GPT-5.4', context_window: 1050000, max_output_tokens: 128000, input_price_per_1k: 0.0025, output_price_per_1k: 0.015 },
+      { model_id: 'gpt-5.4-mini', display_name: 'GPT-5.4 Mini', context_window: 400000, max_output_tokens: 128000, input_price_per_1k: 0.00075, output_price_per_1k: 0.0045 },
       { model_id: 'gpt-4o', display_name: 'GPT-4o', context_window: 128000, max_output_tokens: 16384, input_price_per_1k: 0.0025, output_price_per_1k: 0.01 },
       { model_id: 'gpt-4o-mini', display_name: 'GPT-4o Mini', context_window: 128000, max_output_tokens: 16384, input_price_per_1k: 0.00015, output_price_per_1k: 0.0006 },
       { model_id: 'o3', display_name: 'o3 (reasoning)', context_window: 200000, max_output_tokens: 100000, input_price_per_1k: 0.01, output_price_per_1k: 0.04 },
@@ -820,6 +856,9 @@ async function createDefaultModels(providerId: string, type: ProviderType): Prom
         max_output_tokens: model.max_output_tokens,
         input_price_per_1k: model.input_price_per_1k,
         output_price_per_1k: model.output_price_per_1k,
+        supports_streaming: model.supports_streaming ?? true,
+        supports_vision: model.supports_vision ?? false,
+        supports_tools: model.supports_tools ?? true,
       },
     });
   }

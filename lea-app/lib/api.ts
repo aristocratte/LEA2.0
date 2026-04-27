@@ -6,6 +6,7 @@ import type {
   ApiProvider,
   ApiReport,
   ApiTodo,
+  Checkpoint,
   ContextRecallResult,
   ContextSnapshot,
   CreatePentestRequest,
@@ -42,6 +43,10 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
+function resolveLocalApiHostname(hostname: string): string {
+  return hostname === 'localhost' ? '127.0.0.1' : hostname;
+}
+
 function normalizeBaseUrl(input: string): string {
   const raw = String(input || '').trim();
   if (!raw) {
@@ -67,10 +72,19 @@ function resolveApiBase(): string {
 
   if (typeof window !== 'undefined') {
     const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-    return `${protocol}//${window.location.hostname}:${DEFAULT_API_PORT}`;
+    return `${protocol}//${resolveLocalApiHostname(window.location.hostname)}:${DEFAULT_API_PORT}`;
   }
 
-  return `http://localhost:${DEFAULT_API_PORT}`;
+  return `http://127.0.0.1:${DEFAULT_API_PORT}`;
+}
+
+export function getDevelopmentApiKey(): string | undefined {
+  if (process.env.NODE_ENV === 'production') {
+    return undefined;
+  }
+
+  const apiKey = process.env.NEXT_PUBLIC_LEA_DEV_API_KEY?.trim();
+  return apiKey && apiKey.length > 0 ? apiKey : undefined;
 }
 
 function resolveStreamBase(): string {
@@ -127,7 +141,7 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-async function requestJson<T>(pathname: string, options: RequestOptions = {}): Promise<T> {
+export async function requestJson<T>(pathname: string, options: RequestOptions = {}): Promise<T> {
   const { query, body, headers, method = 'GET', cache = 'no-store', ...init } = options;
   const url = buildUrl(pathname, query);
 
@@ -135,7 +149,7 @@ async function requestJson<T>(pathname: string, options: RequestOptions = {}): P
   if (!finalHeaders.has('Accept')) {
     finalHeaders.set('Accept', 'application/json');
   }
-  const apiKey = process.env.NEXT_PUBLIC_LEA_API_KEY;
+  const apiKey = getDevelopmentApiKey();
   if (apiKey && !finalHeaders.has('Authorization')) {
     finalHeaders.set('Authorization', `Bearer ${apiKey}`);
   }
@@ -504,6 +518,33 @@ export const pentestsApi = {
       }
     );
   },
+
+  getCheckpoints(pentestId: string, params?: { limit?: number; offset?: number }) {
+    return requestJson<ApiEnvelope<{ items: Checkpoint[]; total: number }>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/checkpoints`,
+      { query: params },
+    );
+  },
+
+  createCheckpoint(pentestId: string, opts?: { label?: string }) {
+    return requestJson<ApiEnvelope<Checkpoint>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/checkpoints`,
+      { method: 'POST', body: opts || {} },
+    );
+  },
+
+  getCheckpoint(pentestId: string, checkpointId: string) {
+    return requestJson<ApiEnvelope<Checkpoint>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/checkpoints/${encodeURIComponent(checkpointId)}`,
+    );
+  },
+
+  rewindToCheckpoint(pentestId: string, checkpointId: string) {
+    return requestJson<ApiEnvelope<{ preRewindCheckpointId: string; rewoundAt: string }>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/checkpoints/${encodeURIComponent(checkpointId)}/rewind`,
+      { method: 'POST' },
+    );
+  },
 };
 
 export const providersApi = {
@@ -544,9 +585,10 @@ export const providersApi = {
     );
   },
 
-  async connectOAuth(providerType: 'anthropic' | 'gemini' | 'antigravity'): Promise<{ url: string; message: string }> {
+  async connectOAuth(providerType: 'ANTHROPIC' | 'GEMINI' | 'ANTIGRAVITY'): Promise<{ url: string; message: string }> {
+    const routeProviderType = providerType.toLowerCase();
     return requestJson<{ url: string; message: string }>(
-      `/api/providers/oauth/${providerType}`,
+      `/api/providers/oauth/${routeProviderType}`,
       { method: 'POST' }
     );
   },

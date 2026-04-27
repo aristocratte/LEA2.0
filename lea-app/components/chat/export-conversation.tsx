@@ -55,7 +55,7 @@ function generateExportContent(
             md += `### User\n\n${time}${msg.content}\n\n---\n\n`;
             break;
           case 'orchestrator':
-            md += `### Nia (Orchestrator)\n\n${time}${msg.content}\n\n---\n\n`;
+            md += `### LEA (Orchestrator)\n\n${time}${msg.content}\n\n---\n\n`;
             break;
           case 'thinking':
             md += `<details>\n<summary>Thinking</summary>\n\n${msg.content}\n\n</details>\n\n---\n\n`;
@@ -91,7 +91,7 @@ function generateExportContent(
             txt += `${time}[USER]\n${msg.content}\n\n`;
             break;
           case 'orchestrator':
-            txt += `${time}[NIA]\n${msg.content}\n\n`;
+            txt += `${time}[LEA]\n${msg.content}\n\n`;
             break;
           case 'thinking':
             txt += `${time}[THINKING]\n${msg.content}\n\n`;
@@ -173,7 +173,7 @@ function generatePDF(
         sender = 'User';
         break;
       case 'orchestrator':
-        sender = 'Nia (Orchestrator)';
+        sender = 'LEA (Orchestrator)';
         break;
       case 'thinking':
         sender = 'Thinking';

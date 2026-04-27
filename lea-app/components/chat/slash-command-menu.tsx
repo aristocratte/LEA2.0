@@ -2,52 +2,23 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Target,
-  PauseCircle,
-  PlayCircle,
-  FileText,
-  ShieldAlert,
-  Bot,
-  HelpCircle,
-  Trash2,
-} from 'lucide-react';
+import type { SlashCommand } from '@/hooks/use-commands';
 
-export interface SlashCommand {
-  id: string;
-  label: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  template: string;
-  group: 'actions' | 'navigation' | 'info';
-}
+export type { SlashCommand };
 
 export interface SlashCommandMenuProps {
   query: string;
   selectedIndex: number;
+  commands: SlashCommand[];
   onSelect: (command: SlashCommand) => void;
   onClose: () => void;
   anchorRef: React.RefObject<HTMLDivElement | null>;
 }
 
-export const SLASH_COMMANDS: SlashCommand[] = [
-  // actions group
-  { id: 'scan',     label: '/scan',     description: 'Start a targeted scan',        icon: Target,      template: '/scan ',    group: 'actions'    },
-  { id: 'pause',    label: '/pause',    description: 'Pause the current swarm',      icon: PauseCircle, template: '/pause',    group: 'actions'    },
-  { id: 'resume',   label: '/resume',   description: 'Resume the paused swarm',      icon: PlayCircle,  template: '/resume',   group: 'actions'    },
-  { id: 'report',   label: '/report',   description: 'Generate a pentest report',    icon: FileText,    template: '/report',   group: 'actions'    },
-  // navigation group
-  { id: 'findings', label: '/findings', description: 'Show findings summary',        icon: ShieldAlert, template: '/findings', group: 'navigation' },
-  { id: 'agents',   label: '/agents',   description: 'Show active agents status',    icon: Bot,         template: '/agents',   group: 'navigation' },
-  // info group
-  { id: 'help',     label: '/help',     description: 'List all available commands',  icon: HelpCircle,  template: '/help',     group: 'info'       },
-  { id: 'clear',    label: '/clear',    description: 'Clear the chat history',       icon: Trash2,      template: '/clear',    group: 'info'       },
-];
-
-function filterCommands(query: string): SlashCommand[] {
-  if (!query) return SLASH_COMMANDS;
+function filterCommands(query: string, commands: SlashCommand[]): SlashCommand[] {
+  if (!query) return commands;
   const lower = query.toLowerCase();
-  return SLASH_COMMANDS.filter(
+  return commands.filter(
     (cmd) =>
       cmd.label.toLowerCase().includes(lower) ||
       cmd.description.toLowerCase().includes(lower)
@@ -57,10 +28,11 @@ function filterCommands(query: string): SlashCommand[] {
 export function SlashCommandMenu({
   query,
   selectedIndex,
+  commands,
   onSelect,
   anchorRef: _anchorRef,
 }: SlashCommandMenuProps) {
-  const filtered = filterCommands(query);
+  const filtered = filterCommands(query, commands);
 
   const groups: Array<'actions' | 'navigation' | 'info'> = ['actions', 'navigation', 'info'];
 

@@ -6,17 +6,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 type BannerState = 'offline' | 'restored' | 'hidden';
 
-export function NetworkStatus(): React.ReactElement | null {
-  // SSR-safe: default to true on server, sync on mount
-  const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [banner, setBanner] = useState<BannerState>('hidden');
+function getNavigatorOnline(): boolean {
+  if (typeof navigator === 'undefined') return true;
+  return navigator.onLine ?? true;
+}
 
-  useEffect(() => {
-    setIsOnline(navigator.onLine ?? true);
-    if (!(navigator.onLine ?? true)) {
-      setBanner('offline');
-    }
-  }, []);
+export function NetworkStatus(): React.ReactElement | null {
+  const [isOnline, setIsOnline] = useState<boolean>(() => getNavigatorOnline());
+  const [banner, setBanner] = useState<BannerState>(() => (getNavigatorOnline() ? 'hidden' : 'offline'));
 
   useEffect(() => {
     let dismissTimer: ReturnType<typeof setTimeout> | null = null;

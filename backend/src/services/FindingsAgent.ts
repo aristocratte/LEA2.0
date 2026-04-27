@@ -34,6 +34,7 @@ import {
   type VerificationState,
 } from './FindingQualityPolicy.js';
 import { FindingsEvidenceVerifier } from './FindingsEvidenceVerifier.js';
+import { supportsZaiReasoningModel } from './ZaiModelCatalog.js';
 
 type FindingEventAction = 'created' | 'updated';
 type FindingsAgentStatus = 'idle' | 'queued' | 'processing' | 'error';
@@ -867,7 +868,7 @@ export class FindingsAgent {
   private defaultModelFor(client: AIClient): string {
     switch (client.getProviderName()) {
       case 'zhipu':
-        return 'glm-4.7';
+        return 'glm-5.1';
       case 'openai':
         return 'gpt-4o-2024-11-20';
       case 'gemini':
@@ -883,7 +884,7 @@ export class FindingsAgent {
   private resolveThinkingBudget(modelId: string, rawBudget?: number): number | undefined {
     if (!Number.isFinite(rawBudget) || Number(rawBudget) <= 0) return undefined;
     const modelStr = String(modelId || '').toLowerCase();
-    const supports = /^glm-(5|4\.7|4\.6|4\.5v?|4\.5)\b/i.test(modelStr) || modelStr.includes('thinking') || modelStr.includes('gemini') || modelStr.includes('antigravity');
+    const supports = supportsZaiReasoningModel(modelStr) || modelStr.includes('thinking') || modelStr.includes('gemini') || modelStr.includes('antigravity');
     if (!supports) return undefined;
     const rounded = Math.round(Number(rawBudget));
     return Math.max(0, Math.min(50000, rounded));

@@ -32,6 +32,7 @@ async function buildApp(prismaOverrides: Record<string, unknown> = {}) {
   const fastify = Fastify({ logger: false });
   const prisma = {
     pentest: {
+      findUnique: vi.fn().mockResolvedValue({ status: 'RUNNING', failure_reason: null }),
       update: vi.fn().mockResolvedValue(undefined),
     },
     report: {
@@ -43,6 +44,8 @@ async function buildApp(prismaOverrides: Record<string, unknown> = {}) {
     },
     finding: {
       findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn(),
     },
     ...prismaOverrides,
   };
@@ -94,6 +97,35 @@ describe('reportRoutes', () => {
     }
   });
 
+  it('does not mark failed pentests as completed', async () => {
+    const { fastify, prisma } = await buildApp({
+      pentest: {
+        findUnique: vi.fn().mockResolvedValue({
+          status: 'ERROR',
+          failure_reason: 'Zhipu API error 500',
+        }),
+        update: vi.fn(),
+      },
+    });
+
+    try {
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/api/pentests/pentest-1/complete',
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(prisma.pentest.update).not.toHaveBeenCalled();
+      expect(createReportFromPentestMock).not.toHaveBeenCalled();
+      expect(response.json()).toMatchObject({
+        error: 'Pentest failed and cannot be completed',
+        failure_reason: 'Zhipu API error 500',
+      });
+    } finally {
+      await fastify.close();
+    }
+  });
+
   it('returns paginated report listings', async () => {
     const { fastify } = await buildApp({
       report: {
@@ -126,6 +158,129 @@ describe('reportRoutes', () => {
         findingsCount: 1,
         maxSeverity: 'HIGH',
       });
+    } finally {
+      await fastify.close();
+    }
+  });
+
+  it('updates editable finding fields within a report', async () => {
+    const updatedFinding = {
+      id: 'finding-1',
+      report_id: 'report-1',
+      title: 'Verified reflected XSS',
+      severity: 'HIGH',
+      category: 'Cross-site scripting',
+      description: 'The search endpoint reflects script payloads.',
+      evidence: 'GET /search?q=<script>alert(1)</script>',
+      remediation: 'Encode user-controlled output.',
+      cvss_score: 8.1,
+      endpoint: '/search',
+      updated_at: new Date('2026-04-26T10:00:00.000Z'),
+    };
+    const { fastify, prisma } = await buildApp({
+      finding: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'finding-1', report_id: 'report-1' }),
+        update: vi.fn().mockResolvedValue(updatedFinding),
+      },
+    });
+
+    try {
+      const response = await fastify.inject({
+        method: 'PUT',
+        url: '/api/reports/report-1/findings/finding-1',
+        payload: {
+          title: 'Verified reflected XSS',
+          severity: 'HIGH',
+          category: 'Cross-site scripting',
+          description: 'The search endpoint reflects script payloads.',
+          evidence: 'GET /search?q=<script>alert(1)</script>',
+          remediation: 'Encode user-controlled output.',
+          cvss_score: 8.1,
+          endpoint: '/search',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(prisma.finding.findFirst).toHaveBeenCalledWith({
+        where: { id: 'finding-1', report_id: 'report-1' },
+        select: { id: true },
+      });
+      expect(prisma.finding.update).toHaveBeenCalledWith({
+        where: { id: 'finding-1' },
+        data: {
+          title: 'Verified reflected XSS',
+          severity: 'HIGH',
+          category: 'Cross-site scripting',
+          description: 'The search endpoint reflects script payloads.',
+          evidence: 'GET /search?q=<script>alert(1)</script>',
+          remediation: 'Encode user-controlled output.',
+          cvss_score: 8.1,
+          endpoint: '/search',
+        },
+      });
+      expect(response.json()).toMatchObject({
+        data: {
+          ...updatedFinding,
+          updated_at: '2026-04-26T10:00:00.000Z',
+        },
+      });
+    } finally {
+      await fastify.close();
+    }
+  });
+
+  it('does not update findings outside the requested report', async () => {
+    const { fastify, prisma } = await buildApp({
+      finding: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        update: vi.fn(),
+      },
+    });
+
+    try {
+      const response = await fastify.inject({
+        method: 'PUT',
+        url: '/api/reports/report-1/findings/finding-2',
+        payload: { title: 'Out of report finding' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ error: 'Finding not found in report' });
+      expect(prisma.finding.update).not.toHaveBeenCalled();
+    } finally {
+      await fastify.close();
+    }
+  });
+
+  it('exports a report PDF with the expected response headers', async () => {
+    const pdf = Buffer.from('%PDF-1.4 mocked report');
+    generatePdfMock.mockResolvedValue(pdf);
+
+    const { fastify } = await buildApp({
+      report: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'report-1',
+          pentest: { target: 'app.example.com' },
+          findings: [],
+        }),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+    });
+
+    try {
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/api/reports/report-1/export/pdf',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toContain('application/pdf');
+      expect(response.headers['content-disposition']).toContain('report-app.example.com.pdf');
+      expect(Buffer.from(response.rawPayload).equals(pdf)).toBe(true);
+      expect(generatePdfMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'report-1' }));
     } finally {
       await fastify.close();
     }

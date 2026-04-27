@@ -19,6 +19,69 @@ afterEach(() => {
 });
 
 describe('ZhipuClient', () => {
+  it('uses the Z.ai coding plan endpoint by default', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: streamFromText('data: {"choices":[{"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'),
+    } as Response);
+
+    const client = new ZhipuClient('api-key');
+
+    await client.streamChat({
+      model: 'glm-5.1',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [],
+      systemPrompt: 'system',
+      onEvent: vi.fn(),
+    });
+
+    expect((global.fetch as any).mock.calls[0][0]).toBe('https://api.z.ai/api/coding/paas/v4/chat/completions');
+  });
+
+  it('sends current Z.AI thinking controls for reasoning-capable models', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: streamFromText('data: {"choices":[{"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'),
+    } as Response);
+
+    const client = new ZhipuClient('api-key');
+
+    await client.streamChat({
+      model: 'glm-5.1',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [],
+      systemPrompt: 'system',
+      thinkingBudget: 50000,
+      onEvent: vi.fn(),
+    });
+
+    const body = JSON.parse(String((global.fetch as any).mock.calls[0][1].body));
+    expect(body.thinking).toEqual({ type: 'enabled', clear_thinking: true });
+    expect(body).not.toHaveProperty('thinking_budget');
+  });
+
+  it('does not send Z.AI thinking controls for models without native reasoning', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: streamFromText('data: {"choices":[{"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'),
+    } as Response);
+
+    const client = new ZhipuClient('api-key');
+
+    await client.streamChat({
+      model: 'glm-4.7-flash',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [],
+      systemPrompt: 'system',
+      thinkingBudget: 50000,
+      onEvent: vi.fn(),
+    });
+
+    const body = JSON.parse(String((global.fetch as any).mock.calls[0][1].body));
+    expect(body).not.toHaveProperty('thinking');
+    expect(body).not.toHaveProperty('thinking_budget');
+  });
+
   it('emits reasoning, text, and usage events from an SSE stream', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

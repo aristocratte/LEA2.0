@@ -1,0 +1,29 @@
+{
+  "name": "lea",
+  "version": "1.0.0",
+  "description": "<div align=\"center\">",
+  "main": "postcss.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "vitest": "^4.1.4"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aristocratte/LEA2.0.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/aristocratte/LEA2.0/issues"
+  },
+  "homepage": "https://github.com/aristocratte/LEA2.0#readme"
+}

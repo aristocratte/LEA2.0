@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useCallback, useState, ReactNode } from 'react';
 import { usePentestStore } from '@/store/pentest-store';
 import { toast } from '@/hooks/use-toast';
+import type { StreamMessage } from '@/types';
 
 export interface MessageActionState {
   editingMessageId: string | null;
@@ -23,7 +24,7 @@ interface MessageActionContextType extends MessageActionState {
   isEditing: (messageId: string) => boolean;
   isDeleting: (messageId: string) => boolean;
   isCopied: (messageId: string) => boolean;
-  handleRegenerate: (messageId: string, messages: Array<{ id: string; type: string; content: string }>) => void;
+  handleRegenerate: (messageId: string, messages: StreamMessage[]) => void;
 }
 
 const MessageActionContext = createContext<MessageActionContextType | undefined>(undefined);
@@ -108,20 +109,22 @@ export function MessageActionProvider({ children }: { children: ReactNode }) {
     }, 2000);
   }, []);
 
-  const handleRegenerate = useCallback((messageId: string, messages: Array<{ id: string; type: string; content: string }>) => {
+  const handleRegenerate = useCallback((messageId: string, messages: StreamMessage[]) => {
     const messageIndex = messages.findIndex(m => m.id === messageId);
     if (messageIndex === -1) return;
 
     const targetMessage = messages[messageIndex];
     
-    if (targetMessage.type !== 'text' && targetMessage.type !== 'thinking' && targetMessage.type !== 'orchestrator') {
+    const targetType = String(targetMessage.type);
+    if (targetType !== 'text' && targetType !== 'thinking' && targetType !== 'orchestrator') {
       toast.error('Cannot regenerate this message type');
       return;
     }
 
     let lastUserMessageIndex = -1;
     for (let i = messageIndex - 1; i >= 0; i--) {
-      if (messages[i].type === 'text' || messages[i].type === 'user') {
+      const messageType = String(messages[i].type);
+      if (messageType === 'text' || messageType === 'user') {
         lastUserMessageIndex = i;
         break;
       }
@@ -133,7 +136,7 @@ export function MessageActionProvider({ children }: { children: ReactNode }) {
     }
 
     const messagesToKeep = messages.slice(0, lastUserMessageIndex + 1);
-    setMessages(messagesToKeep as any);
+    setMessages(messagesToKeep);
     toast.success('Regenerating response...');
   }, [setMessages]);
 

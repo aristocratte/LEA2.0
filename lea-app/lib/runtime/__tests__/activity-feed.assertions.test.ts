@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { validateActivityFeed } from '@/lib/runtime/projection-assertions';
 import type { ActivityFeedItem } from '@/hooks/use-swarm-store';

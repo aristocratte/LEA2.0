@@ -36,6 +36,7 @@ export const pentestConfigSchema = z.object({
   mcpServer: z.string().optional(),
   timeout: z.number().nullable().optional(),
   deepThinkingBudget: z.number().nullable().optional(),
+  reasoningEffort: z.enum(['quick', 'standard', 'deep', 'maximum']).optional(),
   rules: z.record(z.boolean()).optional(),
   findingsStrictEvidenceV2: z.boolean().optional(),
   findingsReportHardGate: z.boolean().optional(),

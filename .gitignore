@@ -1,9 +1,11 @@
 node_modules/
 dist/
 build/
+.next/
 .env
 .DS_Store
 .claude/
 firebase-debug.log
 .gemini/
 *.log
+data/transcripts/

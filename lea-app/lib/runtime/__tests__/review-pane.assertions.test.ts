@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { validateReviewPaneData } from '@/lib/runtime/projection-assertions';
 import type { ActivityFeedItem, ReviewPaneData } from '@/hooks/use-swarm-store';

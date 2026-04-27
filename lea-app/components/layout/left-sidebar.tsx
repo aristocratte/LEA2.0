@@ -1,11 +1,11 @@
 'use client';
 
-import { Shield, LayoutDashboard, LayoutTemplate, Bot, FileSearch, Settings, MoreHorizontal, Plus, ChevronDown, Target } from 'lucide-react';
+import { Shield, LayoutDashboard, Settings, MoreHorizontal, Plus, ChevronDown, Target, FileText } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { usePentestList } from '@/hooks/use-pentest-list';
 import { usePentestStore } from '@/store/pentest-store';
 
@@ -19,8 +19,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/pentest/dashboard' },
   { id: 'overview', label: 'Active Scan', icon: Target, href: '/pentest' },
-  { id: 'agents', label: 'Agents', icon: Bot, href: '/pentest?tab=agents' },
-  { id: 'findings', label: 'Findings', icon: FileSearch, href: '/pentest?tab=findings' },
+  { id: 'reports', label: 'Reports', icon: FileText, href: '/reports' },
   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ];
 
@@ -50,6 +49,23 @@ function mapPentestStatus(status: string): 'active' | 'paused' | 'completed' | '
   }
 }
 
+function formatStatusLabel(status: string): string {
+  switch (status) {
+    case 'RUNNING': return 'Running';
+    case 'PAUSED': return 'Paused';
+    case 'COMPLETED': return 'Complete';
+    case 'CANCELLED': return 'Cancelled';
+    case 'ERROR': return 'Error';
+    case 'PREFLIGHT': return 'Preflight';
+    default: return 'Config';
+  }
+}
+
+function formatFindingCount(count?: number): string | null {
+  if (!count) return null;
+  return `${count} finding${count === 1 ? '' : 's'}`;
+}
+
 const STATUS_DOT: Record<string, string> = {
   active: 'bg-emerald-400 animate-pulse',
   paused: 'bg-amber-400',
@@ -60,9 +76,11 @@ const STATUS_DOT: Record<string, string> = {
 export function LeftSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [scansExpanded, setScansExpanded] = useState(true);
-  const { pentests, isLoading: pentestsLoading } = usePentestList();
-  const activePentestId = usePentestStore((s) => s.pentestId);
+  const { pentests, isLoading: pentestsLoading, error: pentestsError, refresh: refreshPentests } = usePentestList();
+  const storePentestId = usePentestStore((s) => s.pentestId);
+  const activePentestId = searchParams?.get('id') || storePentestId;
   const resetPentest = usePentestStore((s) => s.reset);
 
   const isActive = (href: string) => {
@@ -151,31 +169,49 @@ export function LeftSidebar() {
                       <div className="h-4 bg-zinc-100 rounded animate-pulse w-3/4" />
                       <div className="h-4 bg-zinc-100 rounded animate-pulse w-1/2" />
                     </div>
+                  ) : pentestsError && pentests.length === 0 ? (
+                    <div className="px-3 py-4 text-center">
+                      <p className="text-[11px] leading-4 text-zinc-400">Recent scans unavailable</p>
+                      <button
+                        type="button"
+                        onClick={refreshPentests}
+                        className="mt-2 text-[11px] font-medium text-zinc-700 hover:text-zinc-950"
+                      >
+                        Retry
+                      </button>
+                    </div>
                   ) : pentests.length === 0 ? (
                     <p className="px-3 py-4 text-center text-[11px] text-zinc-400">No pentests yet</p>
                   ) : (
                     pentests.slice(0, 20).map((pentest) => {
                       const status = mapPentestStatus(pentest.status);
-                      const isActive = pentest.id === activePentestId;
+                      const findingCount = formatFindingCount(pentest._count?.findings);
+                      const isCurrent = pentest.id === activePentestId;
                       return (
                         <button
                           key={pentest.id}
                           onClick={() => {
                             usePentestStore.getState().loadFromApi(pentest);
-                            router.push('/pentest');
+                            router.push(`/pentest?id=${encodeURIComponent(pentest.id)}`);
                           }}
+                          aria-current={isCurrent ? 'page' : undefined}
                           className={cn(
-                            'w-full flex items-center gap-2 px-3 py-[7px] rounded-lg text-left transition-colors group',
-                            isActive ? 'bg-zinc-50' : 'hover:bg-[rgba(0,0,0,0.03)]',
+                            'w-full flex items-start gap-2 px-3 py-[7px] rounded-lg text-left transition-colors group',
+                            isCurrent ? 'bg-zinc-50' : 'hover:bg-[rgba(0,0,0,0.03)]',
                           )}
                         >
-                          <div className={cn('h-[6px] w-[6px] rounded-full shrink-0', STATUS_DOT[status])} />
-                          <span className={cn(
-                            'flex-1 truncate text-[12px] transition-colors',
-                            isActive ? 'text-zinc-900 font-medium' : 'text-zinc-600 group-hover:text-zinc-800',
-                          )}>
-                            {pentest.target}
-                          </span>
+                          <div className={cn('mt-[5px] h-[6px] w-[6px] rounded-full shrink-0', STATUS_DOT[status])} />
+                          <div className="min-w-0 flex-1">
+                            <span className={cn(
+                              'block truncate text-[12px] transition-colors',
+                              isCurrent ? 'text-zinc-900 font-medium' : 'text-zinc-600 group-hover:text-zinc-800',
+                            )}>
+                              {pentest.target}
+                            </span>
+                            <span className="mt-[2px] block truncate text-[10px] text-zinc-400">
+                              {[formatStatusLabel(pentest.status), findingCount].filter(Boolean).join(' · ')}
+                            </span>
+                          </div>
                           <span className="text-[10px] text-zinc-400 shrink-0 tabular-nums">
                             {formatRelativeDate(pentest.updated_at)}
                           </span>
@@ -195,7 +231,13 @@ export function LeftSidebar() {
         {/* New scan button */}
         <motion.button
           whileHover="hover"
-          onClick={() => { resetPentest(); router.push('/pentest'); }}
+          onClick={() => {
+            const returnTo = activePentestId
+              ? `/pentest?id=${encodeURIComponent(activePentestId)}`
+              : '/pentest/dashboard';
+            resetPentest();
+            router.push(`/pentest/new?returnTo=${encodeURIComponent(returnTo)}`);
+          }}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-zinc-200 text-[13px] text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition-colors group"
         >
           <motion.span

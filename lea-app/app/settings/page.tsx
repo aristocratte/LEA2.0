@@ -22,10 +22,18 @@ import {
 } from 'lucide-react';
 import { LeftSidebar } from '@/components/layout/left-sidebar';
 import { useProviderStore } from '@/store/provider-store';
-import { providersApi } from '@/lib/api';
+import { getDevelopmentApiKey, providersApi } from '@/lib/api';
+import {
+  SETTINGS_DETAIL_MONO_INPUT_CLASS,
+  SETTINGS_MONO_INPUT_CLASS,
+  SETTINGS_TEXT_INPUT_CLASS,
+  ZAI_CODING_PLAN_BASE_URL,
+  defaultProviderBaseUrl,
+} from '@/lib/provider-defaults';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import type { Provider, ProviderType } from '@/types';
+import { RuntimeExtensionsPanel } from '@/components/settings/RuntimeExtensionsPanel';
 
 const PROVIDER_META: Record<ProviderType, {
   name: string;
@@ -49,16 +57,16 @@ const PROVIDER_META: Record<ProviderType, {
   },
   zhipu: {
     name: 'Zhipu AI',
-    description: 'GLM-4 models — get your key at open.bigmodel.cn',
+    description: 'GLM-5 / Coding Plan — get your key at Z.ai',
     accent: 'from-blue-600 via-indigo-500 to-violet-500',
     icon: 'Z',
-    docsUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+    docsUrl: 'https://z.ai/manage-apikey/apikey-list',
     apiKeyLabel: 'API Key',
-    apiKeyPlaceholder: 'your-zhipu-api-key',
+    apiKeyPlaceholder: 'your-z.ai-api-key',
   },
   openai: {
     name: 'OpenAI',
-    description: 'GPT-4o, o3, o4-mini — get your key at platform.openai.com',
+    description: 'GPT-5.5 / GPT-5.4 — get your key at platform.openai.com',
     accent: 'from-emerald-500 via-teal-500 to-cyan-500',
     icon: 'O',
     docsUrl: 'https://platform.openai.com/api-keys',
@@ -155,7 +163,7 @@ function ProviderCard({
             </div>
             <div>
               <h3 className="font-semibold text-zinc-900 text-base leading-tight">
-                {meta.name}
+                {provider.displayName || meta.name}
               </h3>
               <div className="flex items-center gap-2 mt-1">
                 <span className={cn('w-2 h-2 rounded-full', statusColor)} />
@@ -222,6 +230,7 @@ function ProviderDetail({
   } = useProviderStore();
 
   const meta = PROVIDER_META[provider.type];
+  const providerDefaultBaseUrl = defaultProviderBaseUrl(provider.type);
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
@@ -263,11 +272,21 @@ function ProviderDetail({
   const handleConnectOAuth = async () => {
     setIsConnectingOAuth(true);
     try {
-      const oauthType = provider.type as 'anthropic' | 'gemini' | 'antigravity';
+      const oauthType = provider.type.toUpperCase() as 'ANTHROPIC' | 'GEMINI' | 'ANTIGRAVITY';
       const result = await providersApi.connectOAuth(oauthType);
-      // Open the OAuth URL in a new tab
-      window.open(result.url, '_blank', 'width=600,height=700');
+      // Open the OAuth URL in a popup and detect completion
+      const popup = window.open(result.url, '_blank', 'width=600,height=700');
       toast.success('OAuth window opened — authorize then come back here');
+
+      // Poll for popup closure to refresh provider status
+      if (popup) {
+        const poll = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(poll);
+            fetchProviders();
+          }
+        }, 500);
+      }
     } catch {
       toast.error('Failed to start OAuth flow');
     } finally {
@@ -279,10 +298,13 @@ function ProviderDetail({
     if (!newModelId.trim()) return;
     setIsAddingModel(true);
     try {
-      const API_BASE = `${window.location.protocol}//${window.location.hostname}:3001`;
+      const API_BASE = `${window.location.protocol}//${window.location.hostname}:${window.location.port || (window.location.protocol === 'https:' ? '443' : '80')}`;
+      const apiKey = getDevelopmentApiKey();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
       const res = await fetch(`${API_BASE}/api/providers/${provider.id}/models`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           model_id: newModelId.trim(),
           context_window: parseInt(newModelContext) || 128000,
@@ -317,7 +339,7 @@ function ProviderDetail({
             {meta.icon}
           </div>
           <div>
-            <h2 className="text-xl font-bold text-zinc-900">{meta.name}</h2>
+            <h2 className="text-xl font-bold text-zinc-900">{provider.displayName || meta.name}</h2>
             <p className="text-sm text-zinc-500">{meta.description}</p>
           </div>
         </div>
@@ -421,7 +443,7 @@ function ProviderDetail({
                         value={provider.apiKey || ''}
                         onChange={(e) => updateProviderLocal(provider.id, { apiKey: e.target.value })}
                         placeholder={provider.apiKeyConfigured ? '••••••••••••••••' : (meta.apiKeyPlaceholder || 'Enter your API key')}
-                        className="w-full px-3 py-2.5 pr-10 bg-zinc-50 border border-zinc-200 rounded-lg text-sm font-mono focus:border-zinc-400 focus:outline-none transition-colors"
+                        className={cn(SETTINGS_DETAIL_MONO_INPUT_CLASS, 'pr-10')}
                       />
                       <button
                         onClick={() => setShowKey(!showKey)}
@@ -450,9 +472,15 @@ function ProviderDetail({
                       type="text"
                       value={provider.baseUrl || ''}
                       onChange={(e) => updateProviderLocal(provider.id, { baseUrl: e.target.value })}
-                      placeholder="https://api.provider.com/v1"
-                      className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-sm font-mono focus:border-zinc-400 focus:outline-none transition-colors"
+                      placeholder={providerDefaultBaseUrl || 'https://api.provider.com/v1'}
+                      className={SETTINGS_DETAIL_MONO_INPUT_CLASS}
                     />
+                    {providerDefaultBaseUrl && !provider.baseUrl && (
+                      <p className="text-xs text-zinc-500">
+                        Default endpoint for Coding Plan:{' '}
+                        <span className="font-mono text-zinc-700">{providerDefaultBaseUrl}</span>
+                      </p>
+                    )}
                   </div>
                 </>
               )}
@@ -471,7 +499,7 @@ function ProviderDetail({
                         value={provider.apiKey || ''}
                         onChange={(e) => updateProviderLocal(provider.id, { apiKey: e.target.value })}
                         placeholder={provider.apiKeyConfigured ? '••••••••••••••••' : (meta.apiKeyPlaceholder || 'Enter your API key')}
-                        className="w-full px-3 py-2.5 pr-10 bg-zinc-50 border border-zinc-200 rounded-lg text-sm font-mono focus:border-zinc-400 focus:outline-none transition-colors"
+                        className={cn(SETTINGS_DETAIL_MONO_INPUT_CLASS, 'pr-10')}
                       />
                       <button
                         onClick={() => setShowKey(!showKey)}
@@ -627,7 +655,7 @@ function ProviderDetail({
                   value={newModelId}
                   onChange={e => setNewModelId(e.target.value)}
                   placeholder="e.g. gpt-4o-2024-11-20"
-                  className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm font-mono focus:border-zinc-400 focus:outline-none"
+                  className={SETTINGS_MONO_INPUT_CLASS}
                 />
               </div>
               <div>
@@ -637,7 +665,7 @@ function ProviderDetail({
                   value={newModelContext}
                   onChange={e => setNewModelContext(e.target.value)}
                   placeholder="128000"
-                  className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm font-mono focus:border-zinc-400 focus:outline-none"
+                  className={SETTINGS_MONO_INPUT_CLASS}
                 />
               </div>
             </div>
@@ -671,7 +699,7 @@ export default function SettingsPage() {
 
   // Add Provider modal state
   const [addProviderOpen, setAddProviderOpen] = useState(false);
-  const [newProviderType, setNewProviderType] = useState<'ANTHROPIC' | 'ZHIPU' | 'OPENAI' | 'GEMINI' | 'CUSTOM' | 'CODEX' | 'OPENCODE' | 'MISTRAL' | 'DEEPSEEK' | 'OLLAMA'>('ANTHROPIC');
+  const [newProviderType, setNewProviderType] = useState<'ANTHROPIC' | 'ZHIPU' | 'OPENAI' | 'GEMINI' | 'ANTIGRAVITY' | 'CUSTOM' | 'CODEX' | 'OPENCODE' | 'MISTRAL' | 'DEEPSEEK' | 'OLLAMA'>('ANTHROPIC');
   const [newProviderDisplayName, setNewProviderDisplayName] = useState('Anthropic');
   const [newProviderApiKey, setNewProviderApiKey] = useState('');
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState('');
@@ -680,9 +708,10 @@ export default function SettingsPage() {
   // Preset configs for common providers (use CUSTOM type with pre-filled base URL)
   const PROVIDER_PRESETS: Record<string, { type: typeof newProviderType; displayName: string; baseUrl?: string }> = {
     ANTHROPIC: { type: 'ANTHROPIC', displayName: 'Anthropic' },
-    ZHIPU: { type: 'ZHIPU', displayName: 'Zhipu AI (GLM)' },
+    ZHIPU: { type: 'ZHIPU', displayName: 'Zhipu AI (GLM)', baseUrl: ZAI_CODING_PLAN_BASE_URL },
     OPENAI: { type: 'OPENAI', displayName: 'OpenAI' },
     GEMINI: { type: 'GEMINI', displayName: 'Google Gemini' },
+    ANTIGRAVITY: { type: 'ANTIGRAVITY', displayName: 'Google Antigravity' },
     CODEX: { type: 'CODEX', displayName: 'OpenAI Codex' },
     OPENCODE: { type: 'OPENCODE', displayName: 'OpenCode' },
     MISTRAL: { type: 'CUSTOM', displayName: 'Mistral AI', baseUrl: 'https://api.mistral.ai/v1' },
@@ -801,6 +830,7 @@ export default function SettingsPage() {
                 )}
               </AnimatePresence>
             </div>
+            <RuntimeExtensionsPanel />
           </div>
         </div>
       </main>
@@ -829,6 +859,7 @@ export default function SettingsPage() {
                     <option value="ANTHROPIC">Anthropic (Claude)</option>
                     <option value="OPENAI">OpenAI (GPT / o-series)</option>
                     <option value="GEMINI">Google Gemini</option>
+                    <option value="ANTIGRAVITY">Google Antigravity</option>
                     <option value="ZHIPU">Zhipu AI (GLM)</option>
                     <option value="MISTRAL">Mistral AI</option>
                     <option value="DEEPSEEK">DeepSeek</option>
@@ -849,7 +880,7 @@ export default function SettingsPage() {
                   value={newProviderDisplayName}
                   onChange={(e) => setNewProviderDisplayName(e.target.value)}
                   placeholder="e.g. My Anthropic Provider"
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-400"
+                  className={SETTINGS_TEXT_INPUT_CLASS}
                 />
               </div>
 
@@ -861,7 +892,7 @@ export default function SettingsPage() {
                     value={newProviderApiKey}
                     onChange={(e) => setNewProviderApiKey(e.target.value)}
                     placeholder="Enter your API key"
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-400 font-mono"
+                    className={SETTINGS_MONO_INPUT_CLASS}
                   />
                 </div>
               )}
@@ -879,14 +910,20 @@ export default function SettingsPage() {
                   onChange={(e) => setNewProviderBaseUrl(e.target.value)}
                   placeholder={
                     newProviderType === 'OLLAMA' ? 'http://localhost:11434/v1' :
+                    newProviderType === 'ZHIPU' ? ZAI_CODING_PLAN_BASE_URL :
                     newProviderType === 'MISTRAL' ? 'https://api.mistral.ai/v1' :
                     newProviderType === 'DEEPSEEK' ? 'https://api.deepseek.com/v1' :
                     'Leave empty to use the default endpoint'
                   }
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-400 font-mono"
+                  className={SETTINGS_MONO_INPUT_CLASS}
                 />
                 {newProviderType === 'OLLAMA' && (
                   <p className="text-xs text-zinc-500">No API key needed — Ollama runs locally</p>
+                )}
+                {newProviderType === 'ZHIPU' && (
+                  <p className="text-xs text-zinc-500">
+                    Coding Plan default outside China: <span className="font-mono">{ZAI_CODING_PLAN_BASE_URL}</span>
+                  </p>
                 )}
               </div>
             </div>

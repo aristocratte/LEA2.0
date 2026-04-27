@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSlashCommands } from '../use-slash-commands';
-import { SLASH_COMMANDS } from '@/components/chat/slash-command-menu';
+import { FALLBACK_COMMANDS, type SlashCommand } from '../use-commands';
+
+const TEST_COMMANDS: SlashCommand[] = FALLBACK_COMMANDS;
 
 describe('useSlashCommands', () => {
   const mockOnSelectCommand = vi.fn();
@@ -13,7 +15,7 @@ describe('useSlashCommands', () => {
   describe('menu visibility', () => {
     it('should be open when input starts with /', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       expect(result.current.isOpen).toBe(true);
@@ -21,7 +23,7 @@ describe('useSlashCommands', () => {
 
     it('should be closed when input does not start with /', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: 'hello', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: 'hello', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       expect(result.current.isOpen).toBe(false);
@@ -29,7 +31,7 @@ describe('useSlashCommands', () => {
 
     it('should extract query from input', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/scan example.com', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/scan example.com', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       expect(result.current.query).toBe('scan example.com');
@@ -37,7 +39,7 @@ describe('useSlashCommands', () => {
 
     it('should close when dismissed', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/help', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/help', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       act(() => {
@@ -51,38 +53,38 @@ describe('useSlashCommands', () => {
   describe('command filtering', () => {
     it('should show all commands when query is empty', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
-      expect(result.current.filteredCommands).toEqual(SLASH_COMMANDS);
+      expect(result.current.filteredCommands).toEqual(TEST_COMMANDS);
     });
 
     it('should filter commands by label', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/scan', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/scan', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       expect(result.current.filteredCommands.length).toBeGreaterThan(0);
-      expect(result.current.filteredCommands.every(cmd => 
-        cmd.label.toLowerCase().includes('scan') || 
+      expect(result.current.filteredCommands.every(cmd =>
+        cmd.label.toLowerCase().includes('scan') ||
         cmd.description.toLowerCase().includes('scan')
       )).toBe(true);
     });
 
     it('should filter commands by description', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/clear', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/clear', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       expect(result.current.filteredCommands.length).toBeGreaterThan(0);
-      expect(result.current.filteredCommands.some(cmd => 
+      expect(result.current.filteredCommands.some(cmd =>
         cmd.description.toLowerCase().includes('clear')
       )).toBe(true);
     });
 
     it('should return empty array for no match', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/nonexistent', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/nonexistent', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       expect(result.current.filteredCommands).toEqual([]);
@@ -92,7 +94,7 @@ describe('useSlashCommands', () => {
   describe('keyboard navigation', () => {
     it('should handle ArrowDown to select next command', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       const event = { key: 'ArrowDown', preventDefault: vi.fn() } as unknown as React.KeyboardEvent;
@@ -106,10 +108,10 @@ describe('useSlashCommands', () => {
 
     it('should wrap around on ArrowDown at end of list', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
-      const lastIndex = SLASH_COMMANDS.length - 1;
+      const lastIndex = TEST_COMMANDS.length - 1;
 
       for (let i = 0; i <= lastIndex; i++) {
         act(() => {
@@ -122,7 +124,7 @@ describe('useSlashCommands', () => {
 
     it('should handle ArrowUp to select previous command', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       act(() => {
@@ -138,19 +140,19 @@ describe('useSlashCommands', () => {
 
     it('should wrap around on ArrowUp at start of list', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       act(() => {
         result.current.handleKeyDown({ key: 'ArrowUp', preventDefault: vi.fn() } as unknown as React.KeyboardEvent);
       });
 
-      expect(result.current.selectedIndex).toBe(SLASH_COMMANDS.length - 1);
+      expect(result.current.selectedIndex).toBe(TEST_COMMANDS.length - 1);
     });
 
     it('should select command on Enter', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       const event = { key: 'Enter', preventDefault: vi.fn() } as unknown as React.KeyboardEvent;
@@ -159,12 +161,12 @@ describe('useSlashCommands', () => {
         result.current.handleKeyDown(event);
       });
 
-      expect(mockOnSelectCommand).toHaveBeenCalledWith(SLASH_COMMANDS[0].template);
+      expect(mockOnSelectCommand).toHaveBeenCalledWith(TEST_COMMANDS[0].template);
     });
 
     it('should select command on Tab', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       const event = { key: 'Tab', preventDefault: vi.fn() } as unknown as React.KeyboardEvent;
@@ -173,12 +175,12 @@ describe('useSlashCommands', () => {
         result.current.handleKeyDown(event);
       });
 
-      expect(mockOnSelectCommand).toHaveBeenCalledWith(SLASH_COMMANDS[0].template);
+      expect(mockOnSelectCommand).toHaveBeenCalledWith(TEST_COMMANDS[0].template);
     });
 
     it('should close on Escape', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/help', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/help', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       const event = { key: 'Escape', preventDefault: vi.fn() } as unknown as React.KeyboardEvent;
@@ -192,7 +194,7 @@ describe('useSlashCommands', () => {
 
     it('should return false for unhandled keys', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/help', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/help', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       const event = { key: 'a' } as unknown as React.KeyboardEvent;
@@ -206,19 +208,19 @@ describe('useSlashCommands', () => {
   describe('command selection', () => {
     it('should call onSelectCommand with template when selecting', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       act(() => {
-        result.current.handleSelect(SLASH_COMMANDS[0]);
+        result.current.handleSelect(TEST_COMMANDS[0]);
       });
 
-      expect(mockOnSelectCommand).toHaveBeenCalledWith(SLASH_COMMANDS[0].template);
+      expect(mockOnSelectCommand).toHaveBeenCalledWith(TEST_COMMANDS[0].template);
     });
 
     it('should reset selected index after selection', () => {
       const { result } = renderHook(() =>
-        useSlashCommands({ inputValue: '/', onSelectCommand: mockOnSelectCommand })
+        useSlashCommands({ inputValue: '/', commands: TEST_COMMANDS, onSelectCommand: mockOnSelectCommand })
       );
 
       act(() => {
@@ -226,7 +228,7 @@ describe('useSlashCommands', () => {
       });
 
       act(() => {
-        result.current.handleSelect(SLASH_COMMANDS[0]);
+        result.current.handleSelect(TEST_COMMANDS[0]);
       });
 
       expect(result.current.selectedIndex).toBe(0);

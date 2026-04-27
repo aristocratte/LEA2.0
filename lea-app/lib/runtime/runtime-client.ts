@@ -10,6 +10,10 @@ export interface RuntimeClientConnection {
   close: () => void;
 }
 
+function hasMessageData(event: Event): event is MessageEvent {
+  return 'data' in event && typeof (event as MessageEvent).data === 'string';
+}
+
 export class RuntimeClient {
   connect(options: RuntimeClientOptions): RuntimeClientConnection {
     const eventSource = new EventSource(options.url);
@@ -18,14 +22,24 @@ export class RuntimeClient {
       options.onOpen?.();
     };
 
-    eventSource.onerror = (event) => {
-      options.onError?.(event);
-    };
-
     options.eventTypes.forEach((eventType) => {
+      if (eventType === 'error') return;
       eventSource.addEventListener(eventType, (event: Event) => {
-        options.onEvent(eventType, event as MessageEvent);
+        if (hasMessageData(event)) {
+          options.onEvent(eventType, event);
+        }
       });
+    });
+
+    eventSource.addEventListener('error', (event: Event) => {
+      if (hasMessageData(event)) {
+        if (options.eventTypes.includes('error')) {
+          options.onEvent('error', event);
+        }
+        return;
+      }
+
+      options.onError?.(event);
     });
 
     return {

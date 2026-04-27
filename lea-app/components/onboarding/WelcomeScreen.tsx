@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { TemplateGrid } from './TemplateGrid';
-import type { PentestTemplate } from '@/store/pentest-creation-store';
+import { PENTEST_TEMPLATES, type PentestTemplate } from '@/store/pentest-creation-store';
 
 export type StartMode = 'quick' | 'advanced' | null;
 
@@ -53,7 +53,6 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
   };
 
   const findTemplateById = (id: string): PentestTemplate | undefined => {
-    const { PENTEST_TEMPLATES } = require('@/store/pentest-creation-store');
     return PENTEST_TEMPLATES.find((t: PentestTemplate) => t.id === id);
   };
 

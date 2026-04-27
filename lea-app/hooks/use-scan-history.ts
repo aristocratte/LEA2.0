@@ -1,9 +1,15 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePentestList } from './use-pentest-list';
 import type { ScanHistoryItem } from '@/types';
 
 export function useScanHistory(pollInterval = 30000) {
   const { pentests, isLoading } = usePentestList(pollInterval);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), pollInterval);
+    return () => clearInterval(interval);
+  }, [pollInterval]);
 
   const history = useMemo<ScanHistoryItem[]>(() => {
     return pentests.map(p => {
@@ -12,7 +18,7 @@ export function useScanHistory(pollInterval = 30000) {
       const duration = endedAt
         ? Math.floor((endedAt.getTime() - startedAt.getTime()) /1000)
         : p.status === 'RUNNING'
-          ? Math.floor((Date.now() - startedAt.getTime()) / 1000)
+          ? Math.floor((now - startedAt.getTime()) / 1000)
           : 0;
 
       const status: ScanHistoryItem['status'] =
@@ -38,7 +44,7 @@ export function useScanHistory(pollInterval = 30000) {
         },
       };
     });
-  }, [pentests]);
+  }, [now, pentests]);
 
   return { history, isLoading };
 }

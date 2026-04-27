@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { validateMainThreadItems } from '@/lib/runtime/projection-assertions';
 import type { MainThreadItem } from '@/hooks/use-swarm-store';

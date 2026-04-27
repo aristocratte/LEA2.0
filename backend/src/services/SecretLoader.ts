@@ -28,3 +28,6 @@ export function loadSecret(secretName: string, envVarName?: string): string | un
 export const getAnthropicKey = () => loadSecret('ANTHROPIC_API_KEY');
 export const getOpenAIKey = () => loadSecret('OPENAI_API_KEY');
 export const getOpenCodeKey = () => loadSecret('OPENCODE_API_KEY');
+export const getZhipuKey = () => loadSecret('ZHIPU_API_KEY');
+export const getGeminiKey = () => loadSecret('GEMINI_API_KEY');
+export const getCodexKey = () => loadSecret('OPENAI_API_KEY'); // Codex uses OpenAI API keys

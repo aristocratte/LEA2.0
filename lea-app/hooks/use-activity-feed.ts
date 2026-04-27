@@ -2,6 +2,14 @@ import { useMemo } from 'react';
 import { usePentestList } from './use-pentest-list';
 import type { ActivityEvent } from '@/types';
 
+function progressForPentest(id: string, index: number): number {
+  let hash = index;
+  for (const char of id) {
+    hash = (hash * 31 + char.charCodeAt(0)) % 30;
+  }
+  return hash + 50;
+}
+
 export function useActivityFeed(pollInterval = 30000) {
   const { pentests, isLoading } = usePentestList(pollInterval);
 
@@ -21,13 +29,14 @@ export function useActivityFeed(pollInterval = 30000) {
       });
 
       if (p.status === 'RUNNING') {
+        const progress = progressForPentest(p.id, idx);
         result.push({
           id: `${p.id}-progress`,
           timestamp: new Date(startedAt.getTime() + 60000 * (idx + 1)),
           type: 'scan_progress',
-          title: `Scan "${p.target}" - ${Math.floor(Math.random() * 30) + 50}% complete`,
+          title: `Scan "${p.target}" - ${progress}% complete`,
           scanId: p.id,
-          progress: Math.floor(Math.random() * 30) + 50,
+          progress,
         });
       }
 

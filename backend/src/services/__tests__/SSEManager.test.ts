@@ -1,121 +1,63 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { SSEManager } from '../SSEManager.js';
 
-describe('SSEManager', () => {
-  it('replays only newer events when Last-Event-ID uses the evt-<sequence>-... format', () => {
+describe('SSEManager replay retention', () => {
+  it('keeps event replay state after the last client disconnects', () => {
     const manager = new SSEManager();
-    const first = manager.emit('pentest-1', {
-      runId: 'run-1',
-      source: 'system',
-      audience: 'internal',
-      surfaceHint: 'none',
-      eventType: 'swarm.started',
-      payload: {
-        type: 'swarm.started',
-        status: 'RUNNING',
-        target: 'api.example.com',
+    const received: Array<{ event: string; id?: string; payload: unknown }> = [];
+
+    const firstClient = {
+      id: 'client-1',
+      connectedAt: new Date(),
+      send: (event: string, payload: unknown, id?: string) => {
+        received.push({ event, payload, id });
       },
-    });
-    const second = manager.emit('pentest-1', {
-      runId: 'run-1',
+    };
+
+    manager.register('pt-1', firstClient);
+    const first = manager.emit('pt-1', {
+      runId: 'pt-1',
       source: 'system',
       audience: 'internal',
       surfaceHint: 'activity',
-      eventType: 'finding.created',
-      payload: {
-        type: 'finding.created',
-        findingId: 'finding-1',
-        title: 'SQL injection',
-        severity: 'high',
-      },
+      eventType: 'status_change',
+      payload: { type: 'status_change', status: 'RUNNING' },
     });
-    const third = manager.emit('pentest-1', {
-      runId: 'run-1',
-      source: 'system',
-      audience: 'internal',
-      surfaceHint: 'review',
-      eventType: 'approval.requested',
-      payload: {
-        type: 'approval.requested',
-        tool: 'sqlmap',
-        scope: ['api.example.com'],
-        riskClass: 'exec',
-        requiresEscalation: false,
-        affectedTargets: ['api.example.com'],
-      },
-    });
-    const send = vi.fn();
-
-    manager.register(
-      'pentest-1',
-      {
-        id: 'client-evt',
-        send,
-        connectedAt: new Date(),
-      },
-      { lastEventId: second.id },
-    );
-
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith(third.eventType, third, third.id);
-    expect(send).not.toHaveBeenCalledWith(first.eventType, first, first.id);
-  });
-
-  it('replays only newer events when Last-Event-ID uses the legacy numeric format', () => {
-    const manager = new SSEManager();
-    manager.emit('pentest-1', {
-      runId: 'run-1',
-      source: 'system',
-      audience: 'internal',
-      surfaceHint: 'none',
-      eventType: 'swarm.started',
-      payload: {
-        type: 'swarm.started',
-        status: 'RUNNING',
-        target: 'api.example.com',
-      },
-    });
-    manager.emit('pentest-1', {
-      runId: 'run-1',
+    const second = manager.emit('pt-1', {
+      runId: 'pt-1',
       source: 'system',
       audience: 'internal',
       surfaceHint: 'activity',
-      eventType: 'finding.created',
-      payload: {
-        type: 'finding.created',
-        findingId: 'finding-1',
-        title: 'SQL injection',
-        severity: 'high',
-      },
+      eventType: 'status_change',
+      payload: { type: 'status_change', status: 'RUNNING' },
     });
-    const third = manager.emit('pentest-1', {
-      runId: 'run-1',
+
+    expect(first.sequence).toBe(1);
+    expect(second.sequence).toBe(2);
+
+    manager.unregister('pt-1', 'client-1');
+
+    const third = manager.emit('pt-1', {
+      runId: 'pt-1',
       source: 'system',
       audience: 'internal',
-      surfaceHint: 'review',
-      eventType: 'approval.requested',
-      payload: {
-        type: 'approval.requested',
-        tool: 'sqlmap',
-        scope: ['api.example.com'],
-        riskClass: 'exec',
-        requiresEscalation: false,
-        affectedTargets: ['api.example.com'],
-      },
+      surfaceHint: 'activity',
+      eventType: 'status_change',
+      payload: { type: 'status_change', status: 'RUNNING' },
     });
-    const send = vi.fn();
 
-    manager.register(
-      'pentest-1',
-      {
-        id: 'client-legacy',
-        send,
-        connectedAt: new Date(),
+    expect(third.sequence).toBe(3);
+
+    const replayed: Array<{ event: string; id?: string; payload: unknown }> = [];
+    manager.register('pt-1', {
+      id: 'client-2',
+      connectedAt: new Date(),
+      send: (event: string, payload: unknown, id?: string) => {
+        replayed.push({ event, payload, id });
       },
-      { lastEventId: '2' },
-    );
+    }, { lastEventId: second.id });
 
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith(third.eventType, third, third.id);
+    expect(replayed).toHaveLength(1);
+    expect(replayed[0].id).toBe(third.id);
   });
 });

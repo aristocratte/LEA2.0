@@ -123,6 +123,26 @@
   }
 }
 
+.settings-input {
+  color: #18181b;
+  -webkit-text-fill-color: #18181b;
+  caret-color: #18181b;
+  color-scheme: light;
+}
+
+.settings-input::placeholder {
+  color: #a1a1aa;
+  -webkit-text-fill-color: #a1a1aa;
+}
+
+.settings-input:-webkit-autofill,
+.settings-input:-webkit-autofill:hover,
+.settings-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #18181b;
+  box-shadow: 0 0 0 1000px #fafafa inset;
+  transition: background-color 9999s ease-out;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

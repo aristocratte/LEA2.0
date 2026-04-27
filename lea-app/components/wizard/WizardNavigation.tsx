@@ -67,7 +67,7 @@ function NewWizardNavigation({
   }, [handleKeyDown]);
 
   return (
-    <div className={cn('flex items-center justify-between', className)}>
+    <div className={cn('flex items-center justify-between gap-3', className)}>
       {/* Back button - disabled on first step */}
       <motion.button
         type="button"
@@ -77,7 +77,7 @@ function NewWizardNavigation({
         whileTap={!isFirstStep ? { scale: 0.98 } : {}}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         className={cn(
-          'inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors',
+          'inline-flex min-h-11 items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors',
           'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2',
           'disabled:pointer-events-none disabled:opacity-40',
@@ -96,7 +96,7 @@ function NewWizardNavigation({
         whileTap={!isNextDisabled ? { scale: 0.97 } : {}}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         className={cn(
-          'inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white',
+          'inline-flex min-h-11 items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white',
           'bg-[#F5A623] hover:bg-[#e09820]',
           'transition-colors duration-150',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A623] focus-visible:ring-offset-2',
@@ -134,7 +134,7 @@ function LegacyWizardNavigation({
   const isNextDisabled = nextDisabled || isLoading;
 
   return (
-    <div className={cn('flex items-center justify-between', className)}>
+    <div className={cn('flex items-center justify-between gap-3', className)}>
       {/* Back button */}
       {showBack ? (
         <motion.button
@@ -145,7 +145,7 @@ function LegacyWizardNavigation({
           whileTap={onBack != null ? { scale: 0.98 } : {}}
           transition={{ type: 'spring', stiffness: 400, damping: 25 }}
           className={cn(
-            'inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors',
+            'inline-flex min-h-11 items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors',
             'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2',
             'disabled:pointer-events-none disabled:opacity-40',
@@ -167,7 +167,7 @@ function LegacyWizardNavigation({
         whileTap={!isNextDisabled ? { scale: 0.97 } : {}}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         className={cn(
-          'inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white',
+          'inline-flex min-h-11 items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white',
           'bg-[#F5A623] hover:bg-[#e09820]',
           'transition-colors duration-150',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5A623] focus-visible:ring-offset-2',

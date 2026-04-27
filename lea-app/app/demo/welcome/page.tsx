@@ -47,7 +47,7 @@ export default function WelcomeScreenDemo() {
             Demo: WelcomeScreen Component
           </h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Testez l'expérience Quick Start avec templates
+            Testez l&apos;expérience Quick Start avec templates
           </p>
         </div>
       </div>
@@ -110,7 +110,7 @@ export default function WelcomeScreenDemo() {
 
                 <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
                   <p className="text-xs font-medium text-orange-800">
-                    ℹ️ Dans une vraie application, vous seriez redirigé vers l'étape suivante du wizard.
+                    ℹ️ Dans une vraie application, vous seriez redirigé vers l&apos;étape suivante du wizard.
                   </p>
                 </div>
               </div>
@@ -125,7 +125,7 @@ export default function WelcomeScreenDemo() {
 
             {/* Console log */}
             <div className="mt-4 bg-zinc-900 rounded-lg p-4 text-xs font-mono text-zinc-300">
-              <p className="text-zinc-500 mb-2">// Console output:</p>
+              <p className="text-zinc-500 mb-2">{'// Console output:'}</p>
               <p>Mode: {result.mode}</p>
               {result.template && (
                 <>

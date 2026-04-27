@@ -71,24 +71,18 @@ export class ExportService {
     ) => {
       const { font = helvetica, size = 11, color = colors.black, x = margin, maxWidth } = options;
 
-      if (maxWidth) {
-        const lines = this.wrapText(text, font, size, maxWidth);
-        lines.forEach(line => {
-          if (y < margin + 30) {
-            page = pdfDoc.addPage([595.28, 841.89]);
-            y = height - margin;
-          }
-          page.drawText(line, { x, y, size, font, color });
-          y -= size + 4;
-        });
-      } else {
+      const lines = maxWidth
+        ? this.wrapText(text, font, size, maxWidth)
+        : this.normalizePdfText(text).split('\n');
+
+      lines.forEach(line => {
         if (y < margin + 30) {
           page = pdfDoc.addPage([595.28, 841.89]);
           y = height - margin;
         }
-        page.drawText(text, { x, y, size, font, color });
+        page.drawText(line || ' ', { x, y, size, font, color });
         y -= size + 4;
-      }
+      });
     };
 
     // ========================================
@@ -231,24 +225,39 @@ export class ExportService {
    * Helper to wrap text
    */
   private wrapText(text: string, font: any, size: number, maxWidth: number): string[] {
-    const words = text.split(' ');
     const lines: string[] = [];
-    let currentLine = '';
+    const paragraphs = this.normalizePdfText(text).split('\n');
 
-    words.forEach(word => {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-      const testWidth = font.widthOfTextAtSize(testLine, size);
+    paragraphs.forEach(paragraph => {
+      const words = paragraph.trim().split(/\s+/).filter(Boolean);
 
-      if (testWidth > maxWidth && currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
+      if (words.length === 0) {
+        lines.push('');
+        return;
       }
+
+      let currentLine = '';
+
+      words.forEach(word => {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const testWidth = font.widthOfTextAtSize(testLine, size);
+
+        if (testWidth > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      });
+
+      if (currentLine) lines.push(currentLine);
     });
 
-    if (currentLine) lines.push(currentLine);
     return lines;
+  }
+
+  private normalizePdfText(text: string): string {
+    return text.replace(/\r\n?/g, '\n').replace(/\t/g, '  ');
   }
 
   /**

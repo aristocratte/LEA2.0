@@ -30,7 +30,7 @@ function AssistantMessage({ item }: { item: MainThreadItem }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-gray-900">Nia</span>
+          <span className="text-sm font-medium text-gray-900">LEA</span>
           <span className="text-xs text-gray-400">
             {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>

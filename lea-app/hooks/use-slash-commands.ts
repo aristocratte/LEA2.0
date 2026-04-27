@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { SLASH_COMMANDS, type SlashCommand } from '@/components/chat/slash-command-menu';
+import { useState, useCallback } from 'react';
+import type { SlashCommand } from '@/hooks/use-commands';
 
 interface UseSlashCommandsOptions {
   inputValue: string;
+  commands: SlashCommand[];
   onSelectCommand: (template: string) => void;
 }
 
@@ -20,51 +21,44 @@ interface UseSlashCommandsReturn {
 
 export function useSlashCommands({
   inputValue,
+  commands,
   onSelectCommand,
 }: UseSlashCommandsOptions): UseSlashCommandsReturn {
-  const [dismissed, setDismissed] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [dismissedInput, setDismissedInput] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ query: string; index: number }>({
+    query: '',
+    index: 0,
+  });
 
   const startsWithSlash = inputValue.startsWith('/');
   const query = startsWithSlash ? inputValue.slice(1) : '';
-  const isOpen = startsWithSlash && !dismissed;
-
-  // Reset dismissed whenever the user re-types a slash-prefixed value
-  useEffect(() => {
-    if (startsWithSlash) {
-      setDismissed(false);
-    }
-  }, [inputValue, startsWithSlash]);
+  const isOpen = startsWithSlash && dismissedInput !== inputValue;
+  const selectedIndex = selection.query === query ? selection.index : 0;
 
   // Filter commands based on the query
   const filteredCommands: SlashCommand[] = startsWithSlash
     ? query === ''
-      ? SLASH_COMMANDS
-      : SLASH_COMMANDS.filter(
+      ? commands
+      : commands.filter(
           (cmd) =>
             cmd.label.toLowerCase().includes(query.toLowerCase()) ||
             cmd.description.toLowerCase().includes(query.toLowerCase()),
         )
     : [];
 
-  // Reset selected index when query changes
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
   const handleSelect = useCallback(
     (command: SlashCommand) => {
       onSelectCommand(command.template);
-      setDismissed(false);
-      setSelectedIndex(0);
+      setDismissedInput(null);
+      setSelection({ query, index: 0 });
     },
-    [onSelectCommand],
+    [onSelectCommand, query],
   );
 
   const handleClose = useCallback(() => {
-    setDismissed(true);
-    setSelectedIndex(0);
-  }, []);
+    setDismissedInput(inputValue);
+    setSelection({ query, index: 0 });
+  }, [inputValue, query]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent): boolean => {
@@ -73,17 +67,19 @@ export function useSlashCommands({
       switch (e.key) {
         case 'ArrowDown': {
           e.preventDefault();
-          setSelectedIndex((prev) =>
-            filteredCommands.length === 0 ? 0 : (prev + 1) % filteredCommands.length,
+          setSelection(() =>
+            filteredCommands.length === 0
+              ? { query, index: 0 }
+              : { query, index: (selectedIndex + 1) % filteredCommands.length },
           );
           return true;
         }
         case 'ArrowUp': {
           e.preventDefault();
-          setSelectedIndex((prev) =>
+          setSelection(() =>
             filteredCommands.length === 0
-              ? 0
-              : (prev - 1 + filteredCommands.length) % filteredCommands.length,
+              ? { query, index: 0 }
+              : { query, index: (selectedIndex - 1 + filteredCommands.length) % filteredCommands.length },
           );
           return true;
         }
@@ -104,7 +100,7 @@ export function useSlashCommands({
           return false;
       }
     },
-    [isOpen, filteredCommands, selectedIndex, handleSelect, handleClose],
+    [isOpen, filteredCommands, selectedIndex, handleSelect, handleClose, query],
   );
 
   return {

@@ -77,7 +77,7 @@ function messageToResult(msg: ChatMessage, query: string): SearchResult | null {
   switch (msg.type) {
     case 'orchestrator': {
       content = msg.content;
-      title = 'Nia';
+      title = 'LEA';
       meta = `Orchestrator · ${formatRelativeTime(msg.ts)}`;
       icon = Bot;
       break;
@@ -208,12 +208,20 @@ export function SearchModal({ open, onClose, messages, onResultClick }: SearchMo
   const selectedRowRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when modal opens/closes
+  const handleClose = useCallback(() => {
+    setQuery('');
+    setSelectedIndex(0);
+    onClose();
+  }, [onClose]);
+
+  const handleQueryChange = useCallback((nextQuery: string) => {
+    setQuery(nextQuery);
+    setSelectedIndex(0);
+  }, []);
+
+  // Focus the input when the modal opens.
   useEffect(() => {
     if (open) {
-      setQuery('');
-      setSelectedIndex(0);
-      // Small rAF to ensure the element is rendered before focusing
       requestAnimationFrame(() => {
         inputRef.current?.focus();
       });
@@ -260,16 +268,16 @@ export function SearchModal({ open, onClose, messages, onResultClick }: SearchMo
   const handleSelect = useCallback(
     (result: SearchResult) => {
       onResultClick?.(result);
-      onClose();
+      handleClose();
     },
-    [onResultClick, onClose],
+    [onResultClick, handleClose],
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        handleClose();
         return;
       }
       if (results.length === 0) return;
@@ -286,13 +294,8 @@ export function SearchModal({ open, onClose, messages, onResultClick }: SearchMo
         if (result) handleSelect(result);
       }
     },
-    [results, selectedIndex, handleSelect, onClose],
+    [results, selectedIndex, handleSelect, handleClose],
   );
-
-  // Reset selectedIndex when results change
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [results]);
 
   // Build flat list index for each row so we can compute which ref belongs to selectedIndex
   let flatIndex = 0;
@@ -309,7 +312,7 @@ export function SearchModal({ open, onClose, messages, onResultClick }: SearchMo
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-[2px]"
-            onClick={onClose}
+            onClick={handleClose}
             aria-hidden="true"
           />
 
@@ -333,7 +336,7 @@ export function SearchModal({ open, onClose, messages, onResultClick }: SearchMo
                   ref={inputRef}
                   type="text"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => handleQueryChange(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Search messages, findings…"
                   className="flex-1 bg-transparent text-[15px] text-zinc-800 outline-none placeholder:text-zinc-400"

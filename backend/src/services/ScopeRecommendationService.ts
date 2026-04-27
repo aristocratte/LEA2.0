@@ -208,7 +208,7 @@ export class ScopeRecommendationService {
     if (preferredModel) return preferredModel;
     switch (client.getProviderName()) {
       case 'zhipu':
-        return 'glm-4.7';
+        return 'glm-5.1';
       case 'openai':
         return 'gpt-4o-2024-11-20';
       case 'gemini':

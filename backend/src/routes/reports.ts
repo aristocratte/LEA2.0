@@ -5,6 +5,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { ReportService } from '../services/ReportService.js';
 import { ExportService } from '../services/ExportService.js';
@@ -13,7 +14,7 @@ import type {
   FastifyRequestWithParams,
   FastifyRequestWithReportsQuery,
 } from '../types/fastify.d.js';
-import type { ReportStatus, Severity } from '../types/index.js';
+import type { FindingStatus, ReportStatus, Severity } from '../types/index.js';
 
 const reportService = new ReportService();
 const exportService = new ExportService();
@@ -178,6 +179,67 @@ export async function reportRoutes(fastify: FastifyInstance) {
   });
 
   // ========================================
+  // PUT /api/reports/:id/findings/:findingId
+  // ========================================
+  fastify.put('/api/reports/:id/findings/:findingId', async (request, reply) => {
+    const { id, findingId } = request.params as { id: string; findingId: string };
+
+    const schema = z.object({
+      title: z.string().trim().min(1).optional(),
+      severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL']).optional(),
+      category: z.string().trim().min(1).optional(),
+      description: z.string().trim().min(1).optional(),
+      evidence: z.string().nullable().optional(),
+      impact: z.string().nullable().optional(),
+      remediation: z.string().nullable().optional(),
+      cvss_score: z.number().min(0).max(10).nullable().optional(),
+      cvss_vector: z.string().nullable().optional(),
+      cve_id: z.string().nullable().optional(),
+      cwe_id: z.string().nullable().optional(),
+      target_host: z.string().nullable().optional(),
+      endpoint: z.string().nullable().optional(),
+      port: z.number().int().min(1).max(65535).nullable().optional(),
+      protocol: z.string().nullable().optional(),
+      status: z.enum(['OPEN', 'CONFIRMED', 'FALSE_POSITIVE', 'FIXED', 'RISK_ACCEPTED']).optional(),
+    });
+
+    const body = schema.parse(request.body);
+    const existing = await fastify.prisma.finding.findFirst({
+      where: { id: findingId, report_id: id },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return reply.code(404).send({ error: 'Finding not found in report' });
+    }
+
+    const data: Prisma.FindingUpdateInput = {};
+    if (body.title !== undefined) data.title = body.title;
+    if (body.severity !== undefined) data.severity = body.severity as Severity;
+    if (body.category !== undefined) data.category = body.category;
+    if (body.description !== undefined) data.description = body.description;
+    if (body.evidence !== undefined) data.evidence = body.evidence;
+    if (body.impact !== undefined) data.impact = body.impact;
+    if (body.remediation !== undefined) data.remediation = body.remediation;
+    if (body.cvss_score !== undefined) data.cvss_score = body.cvss_score;
+    if (body.cvss_vector !== undefined) data.cvss_vector = body.cvss_vector;
+    if (body.cve_id !== undefined) data.cve_id = body.cve_id;
+    if (body.cwe_id !== undefined) data.cwe_id = body.cwe_id;
+    if (body.target_host !== undefined) data.target_host = body.target_host;
+    if (body.endpoint !== undefined) data.endpoint = body.endpoint;
+    if (body.port !== undefined) data.port = body.port;
+    if (body.protocol !== undefined) data.protocol = body.protocol;
+    if (body.status !== undefined) data.status = body.status as FindingStatus;
+
+    const finding = await fastify.prisma.finding.update({
+      where: { id: findingId },
+      data,
+    });
+
+    return { data: finding };
+  });
+
+  // ========================================
   // DELETE /api/reports/:id
   // ========================================
   fastify.delete('/api/reports/:id', async (request, reply) => {
@@ -294,6 +356,22 @@ export async function reportRoutes(fastify: FastifyInstance) {
   // ========================================
   fastify.post('/api/pentests/:id/complete', async (request, reply) => {
     const { id } = request.params as FastifyRequestWithParams['params'];
+
+    const pentest = await fastify.prisma.pentest.findUnique({
+      where: { id },
+      select: { status: true, failure_reason: true },
+    });
+
+    if (!pentest) {
+      return reply.code(404).send({ error: 'Pentest not found' });
+    }
+
+    if (pentest.status === 'ERROR' || pentest.failure_reason) {
+      return reply.code(409).send({
+        error: 'Pentest failed and cannot be completed',
+        failure_reason: pentest.failure_reason,
+      });
+    }
 
     // Update pentest status
     await fastify.prisma.pentest.update({

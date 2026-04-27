@@ -1,13 +1,12 @@
 /**
  * ZhipuClient - Zhipu AI (GLM) provider implementation
  *
- * Uses the OpenAI-compatible API at https://api.z.ai/api/paas/v4
+ * Uses the OpenAI-compatible GLM Coding Plan API at https://api.z.ai/api/coding/paas/v4
  * Supports streaming and tool use (function calling).
  *
- * GLM-4.7 thinking control:
- *   Pass `thinkingBudget` (number of tokens) to enable deep reasoning.
- *   Higher = more thinking = better accuracy for complex tasks.
- *   Example: 8192 for standard, 16384 for deep analysis.
+ * Z.AI thinking control:
+ *   Pass a positive `thinkingBudget` to enable provider-native reasoning.
+ *   Z.AI currently exposes thinking as enabled/disabled rather than a numeric budget.
  */
 
 import type {
@@ -22,8 +21,7 @@ import type {
     ToolResultContent,
 } from './AIClient.js';
 import { toAbortSignal } from './AIClient.js';
-
-const ZHIPU_BASE_URL = 'https://api.z.ai/api/paas/v4';
+import { supportsZaiReasoningModel, ZAI_CODING_PLAN_BASE_URL } from '../ZaiModelCatalog.js';
 
 interface ZhipuToolCallDelta {
     index?: number;
@@ -63,7 +61,7 @@ export class ZhipuClient implements AIClient {
 
     constructor(apiKey: string, baseUrl?: string, providerName: 'zhipu' | 'openai' | 'custom' = 'zhipu') {
         this.apiKey = apiKey;
-        this.baseUrl = baseUrl || ZHIPU_BASE_URL;
+        this.baseUrl = baseUrl || ZAI_CODING_PLAN_BASE_URL;
         this.providerName = providerName;
     }
 
@@ -98,11 +96,10 @@ export class ZhipuClient implements AIClient {
             body.tools = openaiTools;
         }
 
-        // Enable deep thinking via thinking_budget (GLM-4.7 "Turn-level Thinking")
-        // A higher budget = more reasoning tokens = deeper analysis
-        // Pass 0 or undefined to disable thinking (faster, cheaper)
-        if (thinkingBudget !== undefined && thinkingBudget > 0) {
-            body.thinking_budget = thinkingBudget;
+        // Z.AI's current API uses a turn-level thinking switch instead of the
+        // legacy numeric thinking_budget parameter.
+        if (thinkingBudget !== undefined && thinkingBudget > 0 && supportsZaiReasoningModel(model)) {
+            body.thinking = { type: 'enabled', clear_thinking: true };
         }
 
         const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -158,7 +155,7 @@ export class ZhipuClient implements AIClient {
             const hasToolCalls = toolCallsDelta.length > 0;
             const hasAssistantRole = delta.role === 'assistant';
 
-            // Reasoning/thinking content (supported by GLM-4.7 with thinking_budget)
+            // Reasoning/thinking content emitted by Z.AI models when thinking is enabled.
             if (reasoningDelta.length > 0) {
                 if (!thinkingStarted) {
                     onEvent({ type: 'thinking_start' });

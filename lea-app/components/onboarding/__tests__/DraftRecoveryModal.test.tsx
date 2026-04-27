@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { vi } from 'vitest';
 import { DraftRecoveryModal } from '../DraftRecoveryModal';
 
 describe('DraftRecoveryModal', () => {
@@ -9,12 +10,12 @@ describe('DraftRecoveryModal', () => {
     currentStep: 2,
     totalSteps: 4,
     savedAt: Date.now() - 2 * 60 * 60 * 1000, // 2 hours ago
-    onRecover: jest.fn(),
-    onDiscard: jest.fn(),
+    onRecover: vi.fn(),
+    onDiscard: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should render with draft information', () => {
@@ -36,7 +37,7 @@ describe('DraftRecoveryModal', () => {
   it('should display scan type when provided', () => {
     render(<DraftRecoveryModal {...defaultProps} scanType="deep" />);
 
-    expect(screen.getByText('Deep')).toBeInTheDocument();
+    expect(screen.getByText(/deep/i)).toBeInTheDocument();
   });
 
   it('should call onRecover when Resume Draft is clicked', () => {
@@ -69,16 +70,16 @@ describe('DraftRecoveryModal', () => {
 
   it('should display correct step names', () => {
     const { rerender } = render(<DraftRecoveryModal {...defaultProps} currentStep={0} />);
-    expect(screen.getByText(/Target/)).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 4 (Target)')).toBeInTheDocument();
 
     rerender(<DraftRecoveryModal {...defaultProps} currentStep={1} />);
-    expect(screen.getByText(/Scope/)).toBeInTheDocument();
+    expect(screen.getByText('Step 2 of 4 (Scope)')).toBeInTheDocument();
 
     rerender(<DraftRecoveryModal {...defaultProps} currentStep={2} />);
-    expect(screen.getByText(/Configuration/)).toBeInTheDocument();
+    expect(screen.getByText('Step 3 of 4 (Configuration)')).toBeInTheDocument();
 
     rerender(<DraftRecoveryModal {...defaultProps} currentStep={3} />);
-    expect(screen.getByText(/Review/)).toBeInTheDocument();
+    expect(screen.getByText('Step 4 of 4 (Review)')).toBeInTheDocument();
   });
 
   it('should not render when isOpen is false', () => {

@@ -3,8 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { CryptoService } from './CryptoService.js';
-import { CodexClient } from './ai/CodexClient.js';
-import { OpenCodeClient } from './ai/OpenCodeClient.js';
+import { normalizeZaiBaseUrl, normalizeZaiModelId } from './ZaiModelCatalog.js';
 
 const prisma = new PrismaClient();
 
@@ -31,15 +30,7 @@ const KIMI_DEFAULT_MODEL_ID = 'kimi-k2.5';
 const KIMI_DEFAULT_BASE_URL = 'https://api.moonshot.ai/v1';
 const KIMI_PROVIDER_ALIASES = new Set(['kimi', 'kimi-k2.5', 'moonshot']);
 const KIMI_PROVIDER_HINTS = ['kimi', 'moonshot', 'litellm'];
-const ZHIPU_PROVIDER_ALIASES = new Set(['zhipu', 'zhipu ai']);
-const ZHIPU_MODEL_ALIASES: Record<string, string> = {
-  'glm-4': 'glm-4',
-  'zai/glm-4': 'glm-4',
-  'glm-4-plus': 'glm-4-plus',
-  'zai/glm-4-plus': 'glm-4-plus',
-  'glm-4.7': 'glm-4.7',
-  'zai/glm-4.7': 'glm-4.7',
-};
+const ZHIPU_PROVIDER_ALIASES = new Set(['zhipu', 'zhipu ai', 'z.ai', 'zai', 'z-ai']);
 
 // Ordre de fallback par défaut
 const FALLBACK_ORDER: Record<string, string[]> = {
@@ -211,9 +202,7 @@ export class ProviderManager {
   }
 
   private normalizeZhipuModelId(modelId?: string): string | undefined {
-    const normalized = String(modelId || '').trim().toLowerCase();
-    if (!normalized) return undefined;
-    return ZHIPU_MODEL_ALIASES[normalized];
+    return normalizeZaiModelId(modelId);
   }
 
   private async resolveProviderByAlias(providerLookup: string): Promise<Provider | null> {
@@ -239,6 +228,10 @@ export class ProviderManager {
       return providers.find((provider) => this.isLikelyKimiProvider(provider)) || null;
     }
 
+    if (this.isZhipuLookup(normalizedLookup)) {
+      return providers.find((provider) => provider.type === 'ZHIPU') || null;
+    }
+
     return null;
   }
 
@@ -248,10 +241,11 @@ export class ProviderManager {
     modelId?: string
   ): ProviderWithKey {
     const zhipuModelId = this.normalizeZhipuModelId(modelId);
-    if (zhipuModelId && (provider.type === 'ZHIPU' || this.isZhipuLookup(lookupKey))) {
+    if (provider.type === 'ZHIPU' || this.isZhipuLookup(lookupKey)) {
       return {
         ...provider,
-        defaultModelId: zhipuModelId,
+        base_url: normalizeZaiBaseUrl(provider.base_url),
+        ...(zhipuModelId && { defaultModelId: zhipuModelId }),
       };
     }
 

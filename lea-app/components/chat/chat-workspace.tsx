@@ -49,7 +49,7 @@ export function ChatWorkspace({ messages, onSendMessage, isLoading }: ChatWorksp
           value={inputValue}
           onChange={setInputValue}
           onSend={handleSend}
-          placeholder="Message Nia to start or manage your pentest..."
+          placeholder="Message LEA to start or manage your pentest..."
           loading={isLoading}
         />
       </div>

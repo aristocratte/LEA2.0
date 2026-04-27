@@ -41,6 +41,12 @@ let _eventSource: RuntimeClientConnection | null = null;
 let _connectedPentestId: string | null = null;
 let _flushTimer: ReturnType<typeof setTimeout> | null = null;
 let _pendingFeedMessages: SwarmFeedMessage[] = [];
+let _activeLegacyMessageId: string | null = null;
+let _activeLegacyMessageContent = '';
+let _legacyMessageFlushTimer: ReturnType<typeof setTimeout> | null = null;
+let _pendingLegacyMessage: SwarmFeedMessage | null = null;
+
+const LEGACY_MESSAGE_FLUSH_MS = 300;
 
 function scheduleFlush() {
   if (_flushTimer !== null) return;
@@ -52,6 +58,77 @@ function scheduleFlush() {
       feedMessages: [...s.feedMessages, ...batch].slice(-150),
     }));
   }, 150);
+}
+
+function appendFeedMessage(message: SwarmFeedMessage) {
+  useSwarmStore.setState((s) => ({
+    feedMessages: [...s.feedMessages, message].slice(-150),
+  }));
+}
+
+function upsertFeedMessage(message: SwarmFeedMessage) {
+  useSwarmStore.setState((s) => {
+    const index = s.feedMessages.findIndex((current) => current.id === message.id);
+    if (index === -1) {
+      return { feedMessages: [...s.feedMessages, message].slice(-150) };
+    }
+
+    const existing = s.feedMessages[index];
+    if (
+      existing.content === message.content &&
+      existing.timestamp === message.timestamp &&
+      existing.toolName === message.toolName &&
+      existing.level === message.level
+    ) {
+      return s;
+    }
+
+    const feedMessages = [...s.feedMessages];
+    feedMessages[index] = {
+      ...existing,
+      ...message,
+      content: message.content,
+      timestamp: message.timestamp,
+    };
+    return { feedMessages };
+  });
+}
+
+function flushLegacyMessage() {
+  if (_legacyMessageFlushTimer) {
+    clearTimeout(_legacyMessageFlushTimer);
+    _legacyMessageFlushTimer = null;
+  }
+
+  const message = _pendingLegacyMessage;
+  _pendingLegacyMessage = null;
+  if (message) {
+    upsertFeedMessage(message);
+  }
+}
+
+function scheduleLegacyMessageFlush() {
+  if (_legacyMessageFlushTimer) return;
+  _legacyMessageFlushTimer = setTimeout(() => {
+    _legacyMessageFlushTimer = null;
+    flushLegacyMessage();
+  }, LEGACY_MESSAGE_FLUSH_MS);
+}
+
+function buildSystemFeedMessage(
+  runId: string,
+  content: string,
+  timestamp: number,
+  level?: 'error',
+): SwarmFeedMessage {
+  return {
+    id: `${runId || 'run'}-${timestamp}-${Math.random().toString(36).slice(2, 7)}`,
+    swarmRunId: runId,
+    source: 'system',
+    content,
+    level,
+    timestamp,
+  };
 }
 
 function parseEventData(event: MessageEvent): Record<string, unknown> {
@@ -186,6 +263,7 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
 
     const previousPentestId = _connectedPentestId;
     _connectedPentestId = pentestId;
+    _activeLegacyMessageId = null;
     set({
       pentestId,
       isConnected: false,
@@ -214,6 +292,137 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
 
       if (eventType === 'swarm_connected') {
         set({ isConnected: true });
+        return;
+      }
+
+      if (eventType === 'status_change') {
+        const status = String(payload.status || '').toUpperCase();
+        if (!status) return;
+
+        const mappedStatus: SwarmRun['status'] =
+          status === 'ERROR'
+            ? 'FAILED'
+            : status === 'CANCELLED'
+              ? 'FAILED'
+              : status === 'COMPLETED'
+                ? 'COMPLETED'
+                : status === 'PAUSED'
+                  ? 'PAUSED'
+                  : 'RUNNING';
+
+        set((s) => {
+          const run = s.run ?? createRunSkeleton(pentestId, {
+            runId: runId || pentestId,
+            target: String(payload.target ?? ''),
+            status: mappedStatus,
+          });
+          return {
+            run: {
+              ...run,
+              status: mappedStatus,
+              endedAt: mappedStatus === 'FAILED' || mappedStatus === 'COMPLETED'
+                ? new Date(eventTimestamp).toISOString()
+                : run.endedAt,
+            },
+          };
+        });
+        return;
+      }
+
+      if (eventType === 'message_start') {
+        flushLegacyMessage();
+        _activeLegacyMessageId = String(envelope.id || `legacy-message-${eventTimestamp}`);
+        _activeLegacyMessageContent = '';
+        _pendingLegacyMessage = null;
+        upsertFeedMessage({
+          id: _activeLegacyMessageId,
+          swarmRunId: runId || pentestId,
+          source: 'system',
+          content: '',
+          timestamp: eventTimestamp,
+        });
+        return;
+      }
+
+      if (eventType === 'message_delta') {
+        const chunk = String(payload.text ?? payload.chunk ?? '');
+        if (!chunk) return;
+
+        const messageId = _activeLegacyMessageId || String(envelope.id || `legacy-message-${eventTimestamp}`);
+        _activeLegacyMessageId = messageId;
+        _activeLegacyMessageContent += chunk;
+        _pendingLegacyMessage = {
+          id: messageId,
+          swarmRunId: runId || pentestId,
+          source: 'system',
+          content: _activeLegacyMessageContent,
+          timestamp: eventTimestamp,
+        };
+        scheduleLegacyMessageFlush();
+        return;
+      }
+
+      if (eventType === 'message_end') {
+        flushLegacyMessage();
+        _activeLegacyMessageId = null;
+        _activeLegacyMessageContent = '';
+        return;
+      }
+
+      if (eventType === 'tool_start') {
+        const name = String(payload.name ?? payload.toolName ?? 'tool');
+        appendFeedMessage(buildSystemFeedMessage(
+          runId || pentestId,
+          `Running \`${name}\`…`,
+          eventTimestamp,
+        ));
+        return;
+      }
+
+      if (eventType === 'tool_end') {
+        const name = String(payload.name ?? payload.toolName ?? 'tool');
+        const success = payload.success !== false;
+        const output = String(payload.output ?? '').trim();
+        appendFeedMessage(buildSystemFeedMessage(
+          runId || pentestId,
+          success
+            ? `\`${name}\` completed${output ? `:\n\n${output.slice(0, 1200)}` : '.'}`
+            : `[!] \`${name}\` failed${output ? `:\n\n${output.slice(0, 1200)}` : '.'}`,
+          eventTimestamp,
+          success ? undefined : 'error',
+        ));
+        return;
+      }
+
+      if (eventType === 'error') {
+        const message = String(payload.message || 'Pentest runtime failed');
+        const code = payload.code ? ` (${String(payload.code)})` : '';
+        const details = Array.isArray(payload.errors)
+          ? `\n\n${payload.errors.map((entry) => `- ${String(entry)}`).join('\n')}`
+          : '';
+
+        set((s) => {
+          const run = s.run ?? createRunSkeleton(pentestId, {
+            runId: runId || pentestId,
+            target: String(payload.target ?? ''),
+            status: 'FAILED',
+          });
+          return {
+            connectionError: `${message}${code}`,
+            run: {
+              ...run,
+              status: 'FAILED',
+              endedAt: new Date(eventTimestamp).toISOString(),
+            },
+          };
+        });
+        appendFeedMessage(buildSystemFeedMessage(
+          runId || pentestId,
+          `[!] Runtime failed${code}: ${message}${details}`,
+          eventTimestamp,
+          'error',
+        ));
+        toast.error(`Pentest failed: ${message}`);
         return;
       }
 
@@ -427,6 +636,7 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
       'swarm_connected',
       'swarm.started', 'swarm.paused', 'swarm.resumed', 'swarm.completed', 'swarm.failed',
       'swarm_started', 'swarm_paused', 'swarm_resumed', 'swarm_merged', 'swarm_completed', 'swarm_failed',
+      'status_change', 'phase_change', 'message_start', 'message_delta', 'message_end', 'tool_start', 'tool_end', 'error',
       'agent.drafted', 'agent.spawning', 'agent.running', 'agent.completed', 'agent.failed', 'agent.cancelled',
       'agent_spawned', 'agent_status',
       'finding.created', 'finding.updated', 'finding_created', 'finding_updated',
@@ -491,6 +701,13 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
       _eventSource = null;
     }
     _connectedPentestId = null;
+    _activeLegacyMessageId = null;
+    _activeLegacyMessageContent = '';
+    _pendingLegacyMessage = null;
+    if (_legacyMessageFlushTimer) {
+      clearTimeout(_legacyMessageFlushTimer);
+      _legacyMessageFlushTimer = null;
+    }
     set({ isConnected: false });
   },
 
@@ -500,10 +717,17 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
       _eventSource = null;
     }
     _connectedPentestId = null;
+    _activeLegacyMessageId = null;
+    _activeLegacyMessageContent = '';
+    _pendingLegacyMessage = null;
     _pendingFeedMessages = [];
     if (_flushTimer) {
       clearTimeout(_flushTimer);
       _flushTimer = null;
+    }
+    if (_legacyMessageFlushTimer) {
+      clearTimeout(_legacyMessageFlushTimer);
+      _legacyMessageFlushTimer = null;
     }
     set({
       pentestId: null, run: null, tasks: [], agentMessages: [],

@@ -70,6 +70,7 @@ vi.mock('../ai/CodexClient.js', () => ({ CodexClient: class CodexClient {} }));
 vi.mock('../ai/OpenCodeClient.js', () => ({ OpenCodeClient: class OpenCodeClient {} }));
 
 import { ProviderManager } from '../ProviderManager.js';
+import { supportsZaiReasoningModel } from '../ZaiModelCatalog.js';
 
 function buildProvider(overrides: Record<string, unknown> = {}) {
   const now = new Date('2026-03-19T10:00:00.000Z');
@@ -125,6 +126,44 @@ describe('ProviderManager', () => {
     expect(provider?.decryptedKey).toBe('decrypted-api-key');
     expect(provider?.defaultModelId).toBe('glm-4.7');
     expect(cryptoDecryptMock).toHaveBeenCalledWith('encrypted', 'iv', 'tag');
+  });
+
+  it('normalizes current Z.AI model aliases', async () => {
+    providerFindUniqueMock.mockResolvedValue(buildProvider());
+
+    const manager = new ProviderManager();
+    const provider = await manager.getProvider('provider-1', 'zai/glm-5.1');
+
+    expect(provider?.defaultModelId).toBe('glm-5.1');
+  });
+
+  it('uses the Coding Plan endpoint for existing Z.AI providers with the legacy base URL', async () => {
+    providerFindUniqueMock.mockResolvedValue(buildProvider({
+      base_url: 'https://api.z.ai/api/paas/v4',
+    }));
+
+    const manager = new ProviderManager();
+    const provider = await manager.getProvider('provider-1', 'glm-5.1');
+
+    expect(provider?.base_url).toBe('https://api.z.ai/api/coding/paas/v4');
+  });
+
+  it('resolves Z.AI provider aliases when the configured provider has a custom name', async () => {
+    providerFindUniqueMock.mockResolvedValue(null);
+    providerFindManyMock.mockResolvedValue([
+      buildProvider({ name: 'team-zai', display_name: 'Team Z.AI', type: 'ZHIPU' }),
+    ]);
+
+    const manager = new ProviderManager();
+    const provider = await manager.getProvider('z.ai', 'glm-5.1');
+
+    expect(provider?.name).toBe('team-zai');
+    expect(provider?.defaultModelId).toBe('glm-5.1');
+  });
+
+  it('does not treat Z.AI flash variants as reasoning-capable', () => {
+    expect(supportsZaiReasoningModel('glm-5.1')).toBe(true);
+    expect(supportsZaiReasoningModel('glm-4.7-flash')).toBe(false);
   });
 
   it('selects the default healthy provider before falling back', async () => {

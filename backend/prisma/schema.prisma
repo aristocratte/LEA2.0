@@ -57,6 +57,7 @@ model Pentest {
   events        PentestEvent[]
   swarm_traces  SwarmTrace[]
   swarm_runs    SwarmRun[]
+  checkpoints   Checkpoint[]
   report        Report?
 
   @@index([status])
@@ -739,6 +740,43 @@ enum ContextCompactionTrigger {
   MANUAL
 }
 
+// ============================================
+// CHECKPOINT (State capture for rewind)
+// ============================================
+
+model Checkpoint {
+  id          String   @id @default(uuid())
+  pentest_id  String
+
+  trigger     CheckpointTrigger
+  label       String
+
+  // State vector at checkpoint time
+  message_sequence   Int
+  pentest_phase      String
+  finding_ids        Json    @default("[]")
+  todos_snapshot     Json    @default("[]")
+  agents_snapshot    Json    @default("[]")
+
+  context_snapshot_id String?
+
+  created_at  DateTime @default(now())
+
+  // Relations
+  pentest     Pentest  @relation(fields: [pentest_id], references: [id], onDelete: Cascade)
+
+  @@index([pentest_id])
+  @@index([created_at])
+  @@map("checkpoints")
+}
+
+enum CheckpointTrigger {
+  MANUAL
+  PHASE_CHANGE
+  PRE_REWIND
+  ERROR_RECOVERY
+}
+
 model ContextRecallLog {
   id          String   @id @default(uuid())
   pentest_id  String
@@ -798,4 +836,196 @@ model SwarmAgent {
 
   @@index([swarmRunId])
   @@map("swarm_agents")
+}
+
+// ============================================
+// TEAM (Persistent agent teams)
+// ============================================
+
+model Team {
+  id           String       @id @default(uuid())
+  name         String
+  description  String?      @db.Text
+  leadAgentId  String       @unique
+  status       TeamStatus   @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  members      TeamMember[]
+
+  @@index([status])
+  @@index([leadAgentId])
+  @@map("teams")
+}
+
+enum TeamStatus {
+  ACTIVE
+  DISSOLVED
+}
+
+model TeamMember {
+  id        String      @id @default(uuid())
+  teamId    String
+  team      Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  agentId   String
+  role      TeamRole    @default(WORKER)
+  joinedAt  DateTime    @default(now())
+
+  @@unique([teamId, agentId])
+  @@index([teamId])
+  @@index([agentId])
+  @@map("team_members")
+}
+
+enum TeamRole {
+  LEAD
+  WORKER
+}
+
+// ============================================
+// TASK (Persistent task system)
+// ============================================
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  DELETED
+}
+
+model Task {
+  id          String     @id @default(uuid())
+  subject     String
+  description String?    @db.Text
+  status      TaskStatus @default(PENDING)
+  owner       String?
+  activeForm  String?
+  priority    Int        @default(0)
+  output      String?    @db.Text
+  metadata    Json?
+  blocks      String[]   @default([])
+  blockedBy   String[]   @default([])
+  pentestId   String?
+  teamId      String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status])
+  @@index([owner])
+  @@index([priority])
+  @@index([pentestId])
+  @@index([teamId])
+  @@map("tasks")
+}
+
+// ============================================
+// SESSION MEMORY (Agent-scoped conversation persistence)
+// ============================================
+
+model SessionMessage {
+  id              String   @id @default(uuid())
+  sessionId       String
+  agentId         String
+  pentestId       String?
+
+  // Content
+  role            String                        // 'user' | 'assistant'
+  content         String   @db.Text
+
+  // Token estimation
+  estimatedTokens Int       @default(0)
+
+  // Sequence for ordering
+  sequence        Int
+
+  // Compaction tracking
+  compacted       Boolean   @default(false)     // true when replaced by a summary
+  summaryId       String?                        // links to the summary that replaced this message
+
+  // Timestamps
+  createdAt       DateTime  @default(now())
+
+  // Relations
+  summary         SessionSummary?               @relation(fields: [summaryId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([agentId])
+  @@index([pentestId])
+  @@index([sequence])
+  @@index([compacted])
+  @@map("session_messages")
+}
+
+model SessionSummary {
+  id              String   @id @default(uuid())
+  sessionId       String
+  agentId         String
+  pentestId       String?
+
+  // Summary content
+  summaryContent  String   @db.Text
+  estimatedTokens Int       @default(0)
+
+  // Covered message range
+  fromSequence    Int                           // first message sequence covered
+  toSequence      Int                           // last message sequence covered
+  messageCount    Int       @default(0)         // how many messages were compacted
+
+  // Compaction metadata
+  usedLLM         Boolean   @default(false)
+  tokensBefore    Int       @default(0)
+  tokensAfter     Int       @default(0)
+
+  // Timestamps
+  createdAt       DateTime  @default(now())
+
+  // Relations
+  messages        SessionMessage[]
+
+  @@index([sessionId])
+  @@index([agentId])
+  @@index([pentestId])
+  @@index([fromSequence])
+  @@map("session_summaries")
+}
+
+// ============================================================================
+// EXTRACTED MEMORY — Stable facts extracted from agent conversations
+// ============================================================================
+
+enum MemoryType {
+  TARGET_FACT
+  FINDING
+  USER_PREFERENCE
+  DECISION
+  CONSTRAINT
+}
+
+enum ExtractionTrigger {
+  AGENT_COMPLETE
+  POST_COMPACTION
+  SWARM_SHUTDOWN
+  MANUAL
+}
+
+model ExtractedMemory {
+  id            String     @id @default(uuid())
+  projectKey    String
+  swarmRunId    String
+  agentId       String
+  pentestId     String?
+  type          MemoryType
+  category      String
+  title         String
+  payload       Json
+  confidence    Float     @default(1.0)
+  sourceTurns   Int[]
+  trigger       ExtractionTrigger
+  createdAt     DateTime  @default(now())
+
+  @@index([projectKey])
+  @@index([swarmRunId])
+  @@index([agentId])
+  @@index([pentestId])
+  @@index([type])
+  @@map("extracted_memories")
 }

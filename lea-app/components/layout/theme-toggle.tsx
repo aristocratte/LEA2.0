@@ -1,17 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
 
 export function ThemeToggle({ className }: { className?: string }): React.ReactElement {
   const { resolvedTheme, toggleTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   const isDark = resolvedTheme === 'dark';
 
   return (
@@ -28,11 +22,7 @@ export function ThemeToggle({ className }: { className?: string }): React.ReactE
         .join(' ')}
       suppressHydrationWarning
     >
-      {mounted ? (
-        isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />
-      ) : (
-        <div className="h-4 w-4" />
-      )}
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </button>
   );
 }

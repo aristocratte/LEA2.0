@@ -15,7 +15,7 @@ services:
       MCP_PORT: 3002
       WORKSPACE_ROOT: /workspace
     ports:
-      - "3002:3002"
+      - "${LEA_KALI_MCP_BIND_ADDR:-127.0.0.1}:3002:3002"
     volumes:
       - kali_pentests:/workspace/pentests
       - kali_shared:/workspace/shared
@@ -62,7 +62,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "5433:5433"
+      - "${LEA_POSTGRES_DEV_BIND_ADDR:-127.0.0.1}:5433:5433"
     networks:
       - lea-network
     profiles:
@@ -82,15 +82,17 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      # Keep the in-container listen port stable when SSL_ENABLED=true.
+      SSL_PORT: 3001
       HOST: 0.0.0.0
     volumes:
       - backend_uploads:/app/uploads
       - backend_logs:/app/logs
       - ~/.gemini:/home/lea/.gemini:ro
     ports:
-      - "3001:3001"
+      - "${LEA_BIND_ADDR:-127.0.0.1}:3001:3001"
       # OAuth callback server used by Antigravity/Gemini desktop-style auth flows.
-      - "51121:51121"
+      - "${LEA_OAUTH_CALLBACK_BIND_ADDR:-127.0.0.1}:51121:51121"
     depends_on:
       lea-kali-mcp:
         condition: service_healthy
@@ -99,7 +101,7 @@ services:
     networks:
       - lea-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      test: ["CMD-SHELL", "if [ \"$$SSL_ENABLED\" = \"true\" ]; then wget --no-check-certificate --quiet --tries=1 --spider https://localhost:$${SSL_PORT:-3001}/health; else wget --quiet --tries=1 --spider http://localhost:$${PORT:-3001}/health; fi"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -115,19 +117,19 @@ services:
     container_name: lea-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_BASE: http://backend:3001
-      NEXT_PUBLIC_WS_BASE: ws://backend:3001
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://backend:3001}
+      NEXT_PUBLIC_WS_BASE: ${NEXT_PUBLIC_WS_BASE:-ws://backend:3001}
       API_URL: http://backend:3001
       PORT: 3000
     ports:
-      - "3000:3000"
+      - "${LEA_BIND_ADDR:-127.0.0.1}:3000:3000"
     depends_on:
       backend:
         condition: service_healthy
     networks:
       - lea-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -142,10 +144,10 @@ services:
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@lea-platform.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?Set PGADMIN_PASSWORD in .env before enabling pgadmin}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
-      - "5050:80"
+      - "${LEA_PGADMIN_BIND_ADDR:-127.0.0.1}:5050:80"
     depends_on:
       - postgres
     networks:

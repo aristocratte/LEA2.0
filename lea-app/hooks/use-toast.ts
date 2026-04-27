@@ -25,21 +25,21 @@ export interface ToastHistoryItem extends ToastItem {
 
 // ─── Event bus ───────────────────────────────────────────────────────────────
 
-type Listener = (toasts: ToastItem[]) => void;
+type Listener = () => void;
 
 let _toasts: ToastItem[] = [];
 const _listeners = new Set<Listener>();
 
 let _history: ToastHistoryItem[] = [];
-type HistoryListener = (history: ToastHistoryItem[]) => void;
+type HistoryListener = () => void;
 const _historyListeners = new Set<HistoryListener>();
 
 function _notifyHistory(): void {
-  _historyListeners.forEach((fn) => fn([..._history]));
+  _historyListeners.forEach((fn) => fn());
 }
 
 function _notify(): void {
-  _listeners.forEach((fn) => fn([..._toasts]));
+  _listeners.forEach((fn) => fn());
 }
 
 function _subscribe(fn: Listener): () => void {
@@ -49,6 +49,15 @@ function _subscribe(fn: Listener): () => void {
 
 function _getSnapshot(): ToastItem[] {
   return _toasts;
+}
+
+function _subscribeHistory(fn: HistoryListener): () => void {
+  _historyListeners.add(fn);
+  return () => _historyListeners.delete(fn);
+}
+
+function _getHistorySnapshot(): ToastHistoryItem[] {
+  return _history;
 }
 
 // ─── Core add / remove ───────────────────────────────────────────────────────
@@ -101,27 +110,17 @@ export const toast = {
 
 // ─── React hook (for <Toaster />) ────────────────────────────────────────────
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
+
+const EMPTY_TOASTS: ToastItem[] = [];
+const EMPTY_HISTORY: ToastHistoryItem[] = [];
 
 export function useToastHistory(): ToastHistoryItem[] {
-  const [history, setHistory] = useState<ToastHistoryItem[]>(() => [..._history]);
-  useEffect(() => {
-    setHistory([..._history]);
-    _historyListeners.add(setHistory);
-    return () => { _historyListeners.delete(setHistory); };
-  }, []);
-  return history;
+  return useSyncExternalStore(_subscribeHistory, _getHistorySnapshot, () => EMPTY_HISTORY);
 }
 
 export function useToastStore(): { toasts: ToastItem[]; dismiss: (id: string) => void } {
-  const [toasts, setToasts] = useState<ToastItem[]>(_getSnapshot);
-
-  useEffect(() => {
-    // Sync with any toasts that arrived before mount
-    setToasts(_getSnapshot());
-    const unsub = _subscribe(setToasts);
-    return unsub;
-  }, []);
+  const toasts = useSyncExternalStore(_subscribe, _getSnapshot, () => EMPTY_TOASTS);
 
   return { toasts, dismiss: _remove };
 }

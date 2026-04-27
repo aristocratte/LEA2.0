@@ -1,7 +1,15 @@
 /**
- * MCP Client Service - HTTP-based implementation
- * Manages communication with MCP Kali Linux server via HTTP
- * This version doesn't require the MCP SDK and works with HTTP endpoints
+ * @deprecated Legacy MCP service — use KaliMCPClient instead.
+ *
+ * This file is retained for reference only. All production MCP traffic now goes
+ * through `KaliMCPClient` (`./mcp/KaliMCPClient.ts`), which provides:
+ * - Real JSON-RPC communication with the LEA Kali container
+ * - Scope validation (in-scope / out-of-scope / pending)
+ * - Compat-local mode for development without Docker
+ *
+ * **Do not import this file in new code.** It will be removed in a future release.
+ *
+ * @see KaliMCPClient
  */
 
 export interface McpConnectionConfig {

@@ -1,3 +1,15 @@
+/**
+ * Swarm Routes — Pentest domain swarm endpoints.
+ *
+ * ## Architecture (C3)
+ *
+ * These routes use **PentestOrchestrator** (service layer), NOT SwarmOrchestrator
+ * (core layer). See PentestOrchestrator.ts header for the full double-swarm rationale.
+ *
+ * Shared services (ProviderManager, HookBus, CheckpointService) are injected from
+ * the Fastify instance to avoid duplicate singletons.
+ */
+
 import { randomUUID } from 'node:crypto';
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -41,8 +53,12 @@ const RuntimeControlSchema = z.object({
 });
 
 export async function swarmRoutes(fastify: FastifyInstance): Promise<void> {
-  const providerManager = new ProviderManager();
-  const orchestrator = new PentestOrchestrator(fastify.prisma, providerManager);
+  // Use the shared ProviderManager (same instance as SwarmOrchestrator in index.ts)
+  const providerManager = (fastify as any).providerManager as ProviderManager ?? new ProviderManager();
+  const orchestrator = new PentestOrchestrator(fastify.prisma, providerManager, undefined, {
+    hookBus: (fastify as any).hookBus,
+    checkpointService: (fastify as any).checkpointService,
+  });
 
   const ensurePentestExists = async (id: string) => {
     const pentest = await fastify.prisma.pentest.findUnique({ where: { id } });

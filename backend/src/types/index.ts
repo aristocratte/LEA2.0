@@ -40,6 +40,7 @@ export interface PentestConfig {
   mcpServer?: string;
   timeout?: number;
   deepThinkingBudget?: number;
+  reasoningEffort?: 'quick' | 'standard' | 'deep' | 'maximum';
 }
 
 export interface PreflightCheck {

@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import type { SwarmEventEnvelope, SwarmEventPayload, Finding } from '@/types';
 
+type MainThreadMetadata = Record<string, unknown> & {
+    agentList?: Array<{ id: string; name: string; role: string; status: string }>;
+    approvalId?: string;
+    name?: string;
+    role?: string;
+    riskClass?: string;
+};
+
 // The three explicit UI projections from our event log
 export interface MainThreadItem {
     id: string;
@@ -10,7 +18,7 @@ export interface MainThreadItem {
     content: string;
     timestamp: number;
     isStreaming?: boolean;
-    metadata?: any;
+    metadata?: MainThreadMetadata;
 }
 
 export interface ActivityFeedItem {
@@ -28,11 +36,43 @@ export interface ReviewPaneData {
     id: string;
     title: string;
     summary?: string;
-    params?: any;
+    params?: Record<string, unknown>;
     outputPreview?: string;
     evidence?: string;
-    rawJson?: any;
+    rawJson?: object | string | number | boolean | null;
     timestamp: number;
+}
+
+function payloadObject(payload: SwarmEventPayload): Record<string, unknown> {
+    return typeof payload === 'object' && payload !== null
+        ? payload as unknown as Record<string, unknown>
+        : {};
+}
+
+function payloadText(payload: SwarmEventPayload): string {
+    const text = payloadObject(payload).text;
+    return typeof text === 'string' ? text : '';
+}
+
+function payloadString(payload: Record<string, unknown>, key: string, fallback = ''): string {
+    const value = payload[key];
+    return typeof value === 'string' ? value : fallback;
+}
+
+function toActivityStatus(value: string): ActivityFeedItem['status'] {
+    if (value === 'running' || value === 'completed' || value === 'failed' || value === 'cancelled') {
+        return value;
+    }
+    return 'pending';
+}
+
+function objectField(value: unknown): Record<string, unknown> | null {
+    return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
+}
+
+function toFinding(value: unknown): Finding | null {
+    const candidate = objectField(value);
+    return typeof candidate?.id === 'string' ? candidate as unknown as Finding : null;
 }
 
 interface SwarmStoreState {
@@ -97,14 +137,14 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
                     if (msgIndex >= 0) {
                         mainThreadItems[msgIndex] = {
                             ...mainThreadItems[msgIndex],
-                            content: mainThreadItems[msgIndex].content + (event.payload as any).text,
+                            content: mainThreadItems[msgIndex].content + payloadText(event.payload),
                             isStreaming: event.eventType !== 'assistant.message.done'
                         };
                     } else {
                         mainThreadItems.push({
                             id: `msg-${event.parentEventId || event.correlationId || event.runId}`,
                             type: 'assistant_message',
-                            content: (event.payload as any).text || '',
+                            content: payloadText(event.payload),
                             timestamp: event.timestamp,
                             isStreaming: event.eventType !== 'assistant.message.done',
                             agentRole: 'coordinator'
@@ -116,27 +156,28 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
                     if (msgIndex >= 0) {
                         mainThreadItems[msgIndex] = {
                             ...mainThreadItems[msgIndex],
-                            content: mainThreadItems[msgIndex].content + (event.payload as any).text,
+                            content: mainThreadItems[msgIndex].content + payloadText(event.payload),
                             isStreaming: event.eventType !== 'thinking.summary.done'
                         };
                     } else {
                         mainThreadItems.push({
                             id,
                             type: 'thinking_summary',
-                            content: (event.payload as any).text || '',
+                            content: payloadText(event.payload),
                             timestamp: event.timestamp,
                             isStreaming: event.eventType !== 'thinking.summary.done',
                             agentRole: 'coordinator'
                         });
                     }
                 } else if (event.eventType === 'approval.requested') {
+                    const payload = payloadObject(event.payload);
                     mainThreadItems.push({
                         id: String(event.correlationId || event.id),
                         type: 'approval_request',
-                        content: `Approval required for tool: ${(event.payload as any).tool}`,
+                        content: `Approval required for tool: ${payloadString(payload, 'tool', 'unknown')}`,
                         timestamp: event.timestamp,
                         metadata: {
-                            ...(event.payload as any),
+                            ...payload,
                             approvalId: event.correlationId || event.id,
                         }
                     });
@@ -145,45 +186,54 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
 
             case 'activity':
                 if (event.eventType.startsWith('agent.')) {
-                    const payload = event.payload as any;
-                    if (payload.agentId) {
-                        activeAgents[payload.agentId] = {
-                            role: payload.role,
-                            name: payload.name,
-                            status: event.eventType.split('.')[1]
+                    const payload = payloadObject(event.payload);
+                    const agentId = payloadString(payload, 'agentId');
+                    if (agentId) {
+                        const role = payloadString(payload, 'role', 'agent');
+                        const name = payloadString(payload, 'name', 'Agent');
+                        const status = event.eventType.split('.')[1] || 'pending';
+                        activeAgents[agentId] = {
+                            role,
+                            name,
+                            status
                         };
                         activityFeed.push({
                             id: event.id,
                             type: 'agent_lifecycle',
-                            agentRole: payload.role,
-                            status: event.eventType.split('.')[1] as any,
-                            content: `Agent ${payload.name} (${payload.role}) ${event.eventType.split('.')[1]}`,
+                            agentRole: role,
+                            status: toActivityStatus(status),
+                            content: `Agent ${name} (${role}) ${status}`,
                             timestamp: event.timestamp
                         });
                     }
                 } else if (event.eventType.startsWith('todo.')) {
-                    const p = event.payload as any;
-                    if (p.todo) {
-                        const existingIdx = activityFeed.findIndex(a => a.id === `todo-${p.todo.id}`);
+                    const p = payloadObject(event.payload);
+                    const todo = objectField(p.todo);
+                    if (todo) {
+                        const todoId = payloadString(todo, 'id');
+                        const todoStatus = payloadString(todo, 'status', 'pending').toLowerCase();
+                        const todoLabel = payloadString(todo, 'label');
+                        const todoOwner = payloadString(todo, 'owner');
+                        const existingIdx = activityFeed.findIndex(a => a.id === `todo-${todoId}`);
                         if (existingIdx >= 0) {
                             activityFeed[existingIdx] = {
                                 ...activityFeed[existingIdx],
-                                status: p.todo.status.toLowerCase(),
-                                content: p.todo.label
+                                status: toActivityStatus(todoStatus),
+                                content: todoLabel
                             };
                         } else {
                             activityFeed.push({
-                                id: `todo-${p.todo.id}`,
+                                id: `todo-${todoId}`,
                                 type: 'todo',
-                                status: p.todo.status.toLowerCase() as any,
-                                content: p.todo.label,
+                                status: toActivityStatus(todoStatus),
+                                content: todoLabel,
                                 timestamp: event.timestamp,
-                                agentRole: p.todo.owner
+                                agentRole: todoOwner
                             });
                         }
                     }
                 } else if (event.eventType === 'tool.call.started' || event.eventType === 'tool.call.completed') {
-                    const p = event.payload as any;
+                    const p = payloadObject(event.payload);
                     const id = `tool-${event.correlationId}`;
                     const existingIdx = activityFeed.findIndex(a => a.id === id);
                     if (existingIdx >= 0) {
@@ -196,26 +246,28 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
                             id,
                             type: 'tool_execution',
                             status: event.eventType === 'tool.call.completed' ? 'completed' : 'running',
-                            content: `Tool Execution: ${p.toolName}`,
-                            toolName: p.toolName,
+                            content: `Tool Execution: ${payloadString(p, 'toolName', 'tool')}`,
+                            toolName: payloadString(p, 'toolName', 'tool'),
                             timestamp: event.timestamp,
                         });
                     }
                 } else if (event.eventType === 'finding' || event.eventType === 'finding.created' || event.eventType === 'finding.updated') {
                     // We just store raw findings in the store for other components
-                    const p = event.payload as any;
-                    if (p.data) findings[p.data.id] = p.data;
-                    if (p.findingId) findings[p.findingId] = p as any;
+                    const p = payloadObject(event.payload);
+                    const dataFinding = toFinding(p.data);
+                    if (dataFinding) findings[dataFinding.id] = dataFinding;
+                    const findingId = payloadString(p, 'findingId');
+                    if (findingId) findings[findingId] = { ...p, id: findingId } as unknown as Finding;
                 }
                 break;
 
             case 'review':
                 // Store raw inputs and outputs in the review pane
                 const reviewId = event.correlationId || event.id;
-                const payload = event.payload as any;
+                const payload = payloadObject(event.payload);
                 reviewPaneData[reviewId] = {
                     id: reviewId,
-                    title: payload.title || `Review: ${event.eventType}`,
+                    title: payloadString(payload, 'title', `Review: ${event.eventType}`),
                     timestamp: event.timestamp,
                     rawJson: event.payload
                 };
@@ -224,9 +276,9 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
                         id: reviewId,
                         type: event.eventType.startsWith('terminal.stream.') ? 'tool_execution' : 'agent_lifecycle',
                         status: event.eventType === 'terminal.stream.done' || event.eventType === 'artifact.updated' ? 'completed' : 'running',
-                        content: payload.title || payload.artifactId || event.eventType,
+                        content: payloadString(payload, 'title', payloadString(payload, 'artifactId', event.eventType)),
                         timestamp: event.timestamp,
-                        toolName: payload.toolName,
+                        toolName: payloadString(payload, 'toolName'),
                     });
                 }
                 break;

@@ -76,7 +76,7 @@ function toApiProvider(provider: Partial<Provider>): Record<string, unknown> {
     name: provider.name,
     type: provider.type?.toUpperCase(),
     display_name: provider.displayName,
-    api_key: provider.apiKey || undefined,
+    ...(provider.apiKey ? { api_key: provider.apiKey } : {}),
     base_url: provider.baseUrl,
     enabled: provider.enabled,
     is_default: provider.isDefault,
@@ -180,7 +180,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const apiData = toApiProvider(data);
-      const response = await providersApi.create(apiData as any);
+      const response = await providersApi.create(apiData);
       const newProvider = fromApiProvider(response);
       set((state) => ({
         providers: [...state.providers, newProvider],

@@ -20,6 +20,7 @@ export class SSEManager {
 
   // Event queue for reconnection (last N events per pentest, max 5 minutes old)
   private eventQueue: Map<string, SwarmEventEnvelope<SwarmEventPayload>[]> = new Map();
+  private cleanupTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   // Queue TTL: 5 minutes (events older than this are not sent to reconnecting clients)
   private readonly QUEUE_TTL = 5 * 60 * 1000;
@@ -34,6 +35,8 @@ export class SSEManager {
    * Register a new SSE client for a pentest
    */
   register(pentestId: string, client: SSEClient, options?: { lastEventId?: string }): string {
+    this.cancelCleanup(pentestId);
+
     if (!this.clients.has(pentestId)) {
       this.clients.set(pentestId, new Map());
     }
@@ -77,12 +80,11 @@ export class SSEManager {
   unregister(pentestId: string, clientId: string): void {
     const clients = this.clients.get(pentestId);
     clients?.delete(clientId);
-    // Clean up empty client maps to prevent memory leaks
+    // Clean up empty client maps, but keep replay queues/sequences briefly so
+    // reconnecting clients can recover events emitted while no client was open.
     if (clients?.size === 0) {
       this.clients.delete(pentestId);
-      // Also clean up event queue for this pentest
-      this.eventQueue.delete(pentestId);
-      this.eventSequenceByPentest.delete(pentestId);
+      this.scheduleCleanup(pentestId);
     }
     console.log(`[SSE] ✗ Client ${clientId} unregistered for pentest ${pentestId}`);
   }
@@ -190,7 +192,7 @@ export class SSEManager {
   disconnectAll(pentestId: string): void {
     const clients = this.clients.get(pentestId);
     if (clients) {
-      clients.forEach((client, clientId) => {
+      Array.from(clients.keys()).forEach((clientId) => {
         this.unregister(pentestId, clientId);
       });
     }
@@ -203,6 +205,24 @@ export class SSEManager {
     return Array.from(this.clients.keys()).filter(
       pentestId => this.getClientsCount(pentestId) > 0
     );
+  }
+
+  private scheduleCleanup(pentestId: string): void {
+    this.cancelCleanup(pentestId);
+    const timer = setTimeout(() => {
+      if (this.getClientsCount(pentestId) > 0) return;
+      this.eventQueue.delete(pentestId);
+      this.eventSequenceByPentest.delete(pentestId);
+      this.cleanupTimers.delete(pentestId);
+    }, this.QUEUE_TTL);
+    this.cleanupTimers.set(pentestId, timer);
+  }
+
+  private cancelCleanup(pentestId: string): void {
+    const timer = this.cleanupTimers.get(pentestId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.cleanupTimers.delete(pentestId);
   }
 }
 

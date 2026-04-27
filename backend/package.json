@@ -39,6 +39,7 @@
     "handlebars": "^4.7.8",
     "pdf-lib": "^1.17.1",
     "uuid": "^11.1.0",
+    "typescript": "^5.8.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -50,7 +51,6 @@
     "prisma": "^6.2.1",
     "supertest": "^7.2.2",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
     "vitest": "^4.0.18"
   }
 }
