@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RuntimeClient } from '../runtime-client';
 
 type Listener = (event: Event) => void;
@@ -31,6 +31,11 @@ class FakeEventSource {
 }
 
 describe('RuntimeClient', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it('routes native EventSource error events to onError without onEvent', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     const onError = vi.fn();
@@ -47,7 +52,6 @@ describe('RuntimeClient', () => {
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onEvent).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
   });
 
   it('routes application error message events to onEvent without onError', () => {
@@ -67,6 +71,78 @@ describe('RuntimeClient', () => {
 
     expect(onEvent).toHaveBeenCalledWith('error', message);
     expect(onError).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+  });
+
+  it('uses fetch streaming when headers are provided and dispatches SSE frames', async () => {
+    const onOpen = vi.fn();
+    const onError = vi.fn();
+    const onEvent = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(
+            'id: evt-7-live\n'
+            + 'event: status_change\n'
+            + 'data: {"sequence":7,"payload":{"type":"status_change"}}\n\n'
+          ));
+          controller.close();
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('EventSource', vi.fn());
+
+    new RuntimeClient().connect({
+      url: '/stream',
+      headers: { Authorization: 'Bearer dev-key' },
+      eventTypes: ['status_change'],
+      onOpen,
+      onError,
+      onEvent,
+    });
+
+    await vi.waitFor(() => {
+      expect(onEvent).toHaveBeenCalledTimes(1);
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/stream', expect.objectContaining({
+      headers: { Authorization: 'Bearer dev-key' },
+    }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(onEvent).toHaveBeenCalledWith(
+      'status_change',
+      expect.objectContaining({
+        data: '{"sequence":7,"payload":{"type":"status_change"}}',
+        lastEventId: 'evt-7-live',
+      })
+    );
+    expect(EventSource).not.toHaveBeenCalled();
+  });
+
+  it('reports fetch stream authorization failures through onError', async () => {
+    const onError = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      body: null,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    new RuntimeClient().connect({
+      url: '/stream',
+      headers: { Authorization: 'Bearer wrong' },
+      eventTypes: ['status_change'],
+      onError,
+      onEvent: vi.fn(),
+    });
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
   });
 });

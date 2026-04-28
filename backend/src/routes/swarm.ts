@@ -17,6 +17,7 @@ import { sseManager } from '../services/SSEManager.js';
 import { ProviderManager } from '../services/ProviderManager.js';
 import { PentestOrchestrator } from '../services/PentestOrchestrator.js';
 import { SysReptorService } from '../services/SysReptorService.js';
+import { resolveAllowedCorsOrigin } from '../services/SecurityPolicy.js';
 import type { FastifyRequestWithParams } from '../types/fastify.d.js';
 
 const StartSwarmSchema = z.object({
@@ -234,6 +235,30 @@ export async function swarmRoutes(fastify: FastifyInstance): Promise<void> {
     }
   });
 
+  // POST /api/pentests/:id/swarm/stop
+  fastify.post('/api/pentests/:id/swarm/stop', async (request, reply) => {
+    const { id } = request.params as FastifyRequestWithParams['params'];
+
+    if (!(await ensurePentestExists(id))) {
+      return reply.code(404).send({ error: 'Pentest not found' });
+    }
+
+    try {
+      const run = await orchestrator.stopSwarmAudit(id);
+      return { data: run };
+    } catch (error: any) {
+      if (String(error?.message || '').toLowerCase().includes('no active swarm run')) {
+        return {
+          data: {
+            pentestId: id,
+            status: 'CANCELLED',
+          },
+        };
+      }
+      return sendSwarmError(reply, error, 'Unable to stop swarm');
+    }
+  });
+
   // POST /api/pentests/:id/swarm/force-merge
   fastify.post('/api/pentests/:id/swarm/force-merge', async (request, reply) => {
     const { id } = request.params as FastifyRequestWithParams['params'];
@@ -356,11 +381,17 @@ export async function swarmRoutes(fastify: FastifyInstance): Promise<void> {
     const { id } = request.params as FastifyRequestWithParams['params'];
     const query = (request.query || {}) as { lastEventId?: string | number };
 
-    // CORS headers (reply.raw bypasses Fastify CORS plugin)
     const origin = request.headers.origin;
-    if (origin) {
-      reply.raw.setHeader('Access-Control-Allow-Origin', origin);
+    const allowedOrigin = resolveAllowedCorsOrigin(origin);
+    if (origin && !allowedOrigin) {
+      return reply.code(403).send({ error: 'Origin not allowed' });
+    }
+
+    // CORS headers (reply.raw bypasses Fastify CORS plugin)
+    if (allowedOrigin) {
+      reply.raw.setHeader('Access-Control-Allow-Origin', allowedOrigin);
       reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
+      reply.raw.setHeader('Vary', 'Origin');
     }
 
     // Setup SSE headers

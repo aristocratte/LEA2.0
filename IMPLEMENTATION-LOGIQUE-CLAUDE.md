@@ -55,6 +55,8 @@ Note Session 4: la passe DOCS-01 du 2026-04-26 garde les statuts ci-dessous au n
 
 Note post-stabilisation 2026-04-27: les sessions parallèles ont été intégrées et relues. Le backend build, la suite Vitest backend (`1086 passed`, `1 skipped`), le typecheck frontend, le lint frontend et la suite Vitest frontend (`420 passed`) sont verts. `DOCS-03` synchronise cette feuille avec l'état réel après Session 10, Session 11 et `REPORT-PDF-EXPORT-01`.
 
+Note RC finale 2026-04-28: les huit phases RC de `/Users/aris/Documents/LEA/ROADMAP-ACTIVE.md` sont traitées localement. Cette feuille reste une référence d'architecture long terme, pas une promesse MVP client. Les surfaces LSP, skills, plugins, worktrees visibles, plan mode avancé, remote, IDE, voice et marketplace restent internes/expérimentales tant que la validation RC complète n'est pas rejouée sur un environnement propre.
+
 | Bloc | Statut réel | Lecture opérationnelle |
 |---|---|---|
 | Bloc A - runtime, agents, tasks, permissions, bash, plan, worktrees | DONE / avancé | Les briques runtime existent, sont largement testées et exposées par routes. Le risque restant est surtout l'intégration produit de bout en bout. |
@@ -78,35 +80,44 @@ Définitions utilisées:
 5. Correctif smoke post-MVP: le flux review attend désormais `preflight_state=PASSED` avant `/start`, afin d'éviter la race condition entre résumé preflight et persistance backend.
 6. Remote sessions, IDE bridge, policy avancée et voice restent en backlog après le MVP stabilisé.
 
-## Phase RC Stabilization - décision GPT-5.5 Pro (2026-04-27)
+## Phase RC Stabilization - audit repo GitHub GPT-5.5 Pro (2026-04-27)
 
-Le prochain axe logique n'est plus d'ajouter des capacités Claude Code avancées. LEA entre en stabilisation RC: il faut d'abord rendre le MVP pentest fiable, replayable, stoppable et sécurisé.
+Le prochain axe logique n'est plus d'ajouter des capacités Claude Code avancées. LEA entre en stabilisation RC: il faut rendre le MVP pentest fiable, replayable, stoppable et sécurisé autour des modèles déjà présents.
+
+Décision importante: `PentestEvent` existe déjà dans Prisma avec `sequence`; ne pas créer un deuxième event log. Cette table doit devenir la vérité durable du live scan, du replay, du reload et du resume. `SSEManager` doit rester un transport/cache.
 
 Ordre de stabilisation retenu:
 
-1. `RC-RUN-EVENTLOG-01`: journal d'événements canonique `runId + seq`, replay REST et SSE reconnectable.
-2. `RC-SECURITY-GATES-01`: auth, CORS, ScopeGuard, Tool Invoke API, MCP/Kali et permissions en mode SaaS.
-3. `RC-STOP-CANCEL-01`: stop fiable sur le vrai `PentestRun`, propagation aux outils et suppression de la pause si non prouvée.
-4. `RC-LIVE-PERF-01`: batching, virtualisation et réduction des subscriptions/polling pendant le live scan.
-5. `RC-RUNTIME-PROJECTION-01`: projection produit `PentestRunProjection` au lieu d'exposer directement les concepts swarm.
-6. `RC-CREATION-PREFLIGHT-01`: state machine stricte target -> scope -> config -> review -> preflight -> scan.
-7. `RC-REPORT-EVIDENCE-01`: findings traçables, evidence refs, statuts draft/validated/rejected et exports alignés.
-8. `RC-RESUME-PERSISTENCE-01`: reprise fiable via projection + event replay, pas via état frontend local.
-9. `RC-CUT-LEGACY-UI-DOCS-01`: cacher l'expérimental et aligner la documentation sur le MVP réel.
+1. `RC-EVENTLOG-REPLAY-01`: brancher `PentestEvent` comme source canonique; replay `sinceSeq`, reconnect SSE et reload sans perte.
+2. `RC-STREAM-AUTH-CORS-01`: aligner CORS/auth REST et SSE; supprimer les headers stream trop permissifs et résoudre le contrat auth EventSource.
+3. `RC-SCOPE-GUARD-01`: rendre le ScopeGuard central et impossible à bypasser par ToolExecutor, MCP/Kali ou Tool Invoke.
+4. `RC-STOP-RUN-01`: stop unique du vrai run pentest; cacher pause tant qu'elle n'est pas prouvée fiable.
+5. `RC-ACTIVE-PROJECTION-01`: exposer une `PentestRunProjection` produit au lieu de laisser l'UI consommer directement swarm/runtime.
+6. `RC-UI-SPLIT-PERF-01`: réduire les god components côté Active Scan après stabilisation du contrat projection/events.
+7. `RC-REPORT-EVIDENCE-01`: renforcer preuve -> finding -> export sans refaire le modèle `Finding`, déjà riche.
+8. `RC-CUT-EXPERIMENTAL-DOCS-01`: cacher l'expérimental et aligner README/docs/endpoints avec la surface MVP réelle.
 
 Décisions structurantes:
 
-- `PentestOrchestrator` reste la source produit MVP; `SwarmOrchestrator` reste un moteur interne/expérimental tant qu'il ne nourrit pas une projection fiable.
+- Source de vérité temporelle: `PentestEvent`; source conversationnelle dérivée: `Message`; preuves outillage: `ToolExecution` + `KaliAuditLog`; état courant: `PentestRunProjection`.
+- Ne pas fusionner `PentestOrchestrator` et le runtime swarm maintenant. L'UI MVP ne doit pas consommer `SwarmRun`, `SwarmAgent` ou `RuntimeControl` directement.
 - `ToolRegistry`, `ToolExecutor`, `HookBus`, MCP bridge et `RuntimeTaskManager` restent des infrastructures internes, pas des features client à vendre dans le MVP.
-- LSP, skills, plugins, remote sessions, IDE bridge, voice, marketplace et worktrees visibles sont repoussés après stabilisation.
-- `POST /api/tools/:name/invoke` doit rester admin/dev ou être fortement protégé par auth, `pentestRunId`, scope et audit.
-- Aucun outil pentest ne doit contourner permissions, ScopeGuard, audit log et cancellation.
+- LSP, skills, plugins, remote sessions, IDE bridge, voice, marketplace, worktrees visibles et plan mode avancé sont repoussés après stabilisation.
+- `POST /api/tools/:name/invoke` reste admin/dev, feature-flagged, ou fortement protégé par auth, `pentestRunId`, scope serveur et audit.
+- Aucun outil pentest ne doit contourner auth, permissions, ScopeGuard, audit log et cancellation.
 
 Risques restants côté logique:
 
 - Le pipeline runtime est largement présent et testé, mais la preuve produit finale reste le parcours pentest complet avec provider réel ou stub contrôlé.
 - MCP/LSP/skills/plugins existent techniquement; leur valeur produit doit être validée par usage, pas seulement par présence de routes.
 - Les fichiers chauds d'intégration (`backend/src/index.ts`, types Fastify, orchestration pentest) ne doivent plus être modifiés sans lot dédié.
+
+État après `RC-CUT-EXPERIMENTAL-DOCS-01`:
+
+- La surface client est volontairement réduite au flux pentest MVP: providers, création, preflight, live scan, stop, findings, reports et reprise.
+- ToolRegistry, ToolExecutor, HookBus, MCP bridge, RuntimeTaskManager, skills, plugins et LSP restent des infrastructures internes/admin.
+- La documentation publique est réalignée sur `lea-app`, les exports JSON/HTML/PDF, les flags expérimentaux et les endpoints actuels.
+- La prochaine activité logique n'est plus une phase de développement RC, mais une validation release candidate complète et un nettoyage de branche/worktree.
 
 ## Pré-requis transversal
 

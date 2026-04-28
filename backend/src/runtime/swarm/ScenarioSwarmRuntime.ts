@@ -127,6 +127,28 @@ export class ScenarioSwarmRuntime implements SwarmRuntime {
     return cloneRun(session.run);
   }
 
+  async stop(pentestId: string): Promise<Swarm> {
+    const session = this.requireSession(pentestId);
+    session.run.status = 'CANCELLED';
+    session.run.endedAt = new Date().toISOString();
+    session.run.forceMerged = true;
+    session.clock.resume();
+    for (const waiter of session.pendingApprovals.values()) {
+      waiter.resolve('denied');
+    }
+    session.pendingApprovals.clear();
+    await this.emit(session, {
+      runId: session.run.id,
+      source: 'system',
+      audience: 'user',
+      surfaceHint: 'none',
+      eventType: 'swarm.completed',
+      payload: { type: 'swarm.completed', status: 'CANCELLED' },
+    });
+    this.pushHistory(session.run);
+    return cloneRun(session.run);
+  }
+
   async forceMerge(pentestId: string): Promise<Swarm> {
     const session = this.requireSession(pentestId);
     session.run.forceMerged = true;
@@ -170,7 +192,7 @@ export class ScenarioSwarmRuntime implements SwarmRuntime {
   private async executeScenario(session: ScenarioSession): Promise<void> {
     try {
       await this.executeSteps(session, session.scenario.steps);
-      if (session.run.status !== 'COMPLETED' && session.run.status !== 'FAILED') {
+      if (session.run.status !== 'COMPLETED' && session.run.status !== 'FAILED' && session.run.status !== 'CANCELLED') {
         await this.emit(session, {
           runId: session.run.id,
           source: 'nia',
@@ -181,6 +203,9 @@ export class ScenarioSwarmRuntime implements SwarmRuntime {
         });
       }
     } catch (error: any) {
+      if (session.run.status === 'CANCELLED') {
+        return;
+      }
       await this.emit(session, {
         runId: session.run.id,
         source: 'system',
@@ -200,7 +225,7 @@ export class ScenarioSwarmRuntime implements SwarmRuntime {
 
   private async executeSteps(session: ScenarioSession, steps: ScenarioStep[]): Promise<void> {
     for (const step of steps) {
-      if (session.run.forceMerged) return;
+      if (session.run.forceMerged || session.run.status === 'CANCELLED') return;
 
       if (step.kind === 'delay') {
         await session.clock.sleep(step.ms);

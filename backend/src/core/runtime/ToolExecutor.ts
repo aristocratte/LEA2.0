@@ -13,6 +13,7 @@ import type { PermissionRequestStore } from '../permissions/PermissionRequestSto
 import { hasPermissionsToUseTool } from '../permissions/PermissionEngine.js';
 import type { HookBus } from '../hooks/HookBus.js';
 import type { RuntimeTaskManager } from './RuntimeTaskManager.js';
+import { evaluateToolScope, type ScopeGuardContext } from './ScopeGuard.js';
 
 // ============================================================================
 // PUBLIC TYPES
@@ -41,6 +42,7 @@ export type ToolExecutionErrorCode =
   | 'permission_denied'
   | 'permission_denied_by_user'
   | 'permission_approval_required'
+  | 'scope_denied'
   | 'tool_execution_error'
   | 'unknown_error';
 
@@ -307,6 +309,29 @@ export class ToolExecutor {
       cwd: agentCwd,
       ...(params.runtimeContext ?? {}),
     };
+
+    const scopeDecision = evaluateToolScope({
+      toolName: tool.name,
+      toolSource: tool.source,
+      input: validatedInput as Record<string, unknown>,
+      context: context as ScopeGuardContext,
+      requireScope: tool.source === 'mcp',
+    });
+
+    if (!scopeDecision.allowed) {
+      return {
+        event: {
+          type: 'tool_result',
+          id: toolUseId,
+          toolName,
+          result: scopeDecision.reason,
+          isError: true,
+        },
+        errorCode: 'scope_denied',
+        recoverable: true,
+        suggestions: ['Use a target inside the authorized scope or update the pentest scope first'],
+      };
+    }
 
     // Step 3.5: Check tool permissions through PermissionEngine.
     // Even non-interactive executors must use the full engine so `passthrough`

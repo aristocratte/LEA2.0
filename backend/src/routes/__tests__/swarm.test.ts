@@ -5,6 +5,7 @@ import { sseManager } from '../../services/SSEManager.js';
 
 const {
   startSwarmAuditMock,
+  stopSwarmAuditMock,
   getSwarmRunMock,
   getSwarmHistoryMock,
   controlSwarmRuntimeMock,
@@ -21,6 +22,7 @@ const {
   sysReptorServiceConstructorMock,
 } = vi.hoisted(() => {
   const startSwarmAuditMock = vi.fn();
+  const stopSwarmAuditMock = vi.fn();
   const getSwarmRunMock = vi.fn();
   const getSwarmHistoryMock = vi.fn();
   const controlSwarmRuntimeMock = vi.fn();
@@ -35,6 +37,7 @@ const {
 
   class PentestOrchestratorMock {
     startSwarmAudit = startSwarmAuditMock;
+    stopSwarmAudit = stopSwarmAuditMock;
     getSwarmRun = getSwarmRunMock;
     getSwarmHistory = getSwarmHistoryMock;
     controlSwarmRuntime = controlSwarmRuntimeMock;
@@ -64,6 +67,7 @@ const {
 
   return {
     startSwarmAuditMock,
+    stopSwarmAuditMock,
     getSwarmRunMock,
     getSwarmHistoryMock,
     controlSwarmRuntimeMock,
@@ -358,6 +362,54 @@ describe('swarmRoutes', () => {
     }
   });
 
+  it('POST /api/pentests/:id/swarm/stop stops the active swarm runtime', async () => {
+    stopSwarmAuditMock.mockResolvedValue({
+      id: 'swarm-run-1',
+      pentestId: 'pentest-1',
+      status: 'CANCELLED',
+    });
+    const { fastify } = await buildApp();
+
+    try {
+      const response = await request(fastify.server)
+        .post('/api/pentests/pentest-1/swarm/stop')
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        data: {
+          id: 'swarm-run-1',
+          pentestId: 'pentest-1',
+          status: 'CANCELLED',
+        },
+      });
+      expect(stopSwarmAuditMock).toHaveBeenCalledWith('pentest-1');
+    } finally {
+      await fastify.close();
+    }
+  });
+
+  it('POST /api/pentests/:id/swarm/stop treats missing in-memory swarm runs as already stopped', async () => {
+    stopSwarmAuditMock.mockRejectedValue(new Error('No active swarm run for this pentest'));
+    const { fastify } = await buildApp();
+
+    try {
+      const response = await request(fastify.server)
+        .post('/api/pentests/pentest-1/swarm/stop')
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        data: {
+          pentestId: 'pentest-1',
+          status: 'CANCELLED',
+        },
+      });
+    } finally {
+      await fastify.close();
+    }
+  });
+
   it('POST /api/pentests/:id/swarm/tools/approve valide une approval pending', async () => {
     approveSwarmSensitiveToolMock.mockResolvedValue(true);
     const { fastify } = await buildApp();
@@ -569,6 +621,8 @@ describe('swarmRoutes', () => {
       expect(response.headers['cache-control']).toBe('no-cache, no-transform');
       expect(response.headers['connection']).toBe('keep-alive');
       expect(response.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+      expect(response.headers['access-control-allow-credentials']).toBe('true');
+      expect(response.headers.vary).toContain('Origin');
 
       expect(response.frame).toContain('event: swarm_connected');
       expect(response.frame).toContain('"pentest_id":"pentest-1"');
@@ -582,6 +636,39 @@ describe('swarmRoutes', () => {
         }),
         { lastEventId: '9' }
       );
+    } finally {
+      await fastify.close();
+    }
+  });
+
+  it('GET /api/pentests/:id/swarm/stream rejects disallowed browser origins', async () => {
+    const { fastify } = await buildApp();
+
+    try {
+      const response = await request(fastify.server)
+        .get('/api/pentests/pentest-1/swarm/stream')
+        .set('Origin', 'http://evil.test');
+
+      expect(response.status).toBe(403);
+      expect(response.headers['access-control-allow-origin']).toBeUndefined();
+      expect(response.body).toEqual({ error: 'Origin not allowed' });
+    } finally {
+      await fastify.close();
+    }
+  });
+
+  it('GET /api/pentests/:id/swarm/stream opens without CORS headers when Origin is absent', async () => {
+    const { fastify } = await buildApp();
+
+    try {
+      const response = await readInitialSseFrame(
+        fastify.server,
+        '/api/pentests/pentest-1/swarm/stream'
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers['access-control-allow-origin']).toBeUndefined();
+      expect(response.frame).toContain('event: swarm_connected');
     } finally {
       await fastify.close();
     }

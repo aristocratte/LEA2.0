@@ -87,6 +87,17 @@ describe('LeftSidebar recent scans', () => {
     expect(usePentestStore.getState().target).toBe('127.0.0.1');
   });
 
+  it('hides experimental navigation by default', () => {
+    mockPentestList();
+
+    render(<LeftSidebar />);
+
+    expect(screen.queryByRole('link', { name: /dashboard/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /active scan/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /reports/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument();
+  });
+
   it('marks the URL pentest id as current even before the store hydrates', () => {
     navMocks.searchParams = new URLSearchParams('id=pentest-report');
     mockPentestList({

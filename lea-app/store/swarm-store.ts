@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { getSwarmStreamUrl } from '@/lib/api';
+import { getDevelopmentApiKey, getSwarmStreamUrl } from '@/lib/api';
 import { runtimeClient, type RuntimeClientConnection } from '@/lib/runtime/runtime-client';
 import { toast } from '@/hooks/use-toast';
 import type { SwarmRun, SwarmTask, AgentMessage, SwarmFeedMessage, SwarmAgent, SwarmFinding } from '@/types';
@@ -158,6 +158,28 @@ function normalizeEventCursor(value: unknown): string | null {
   return null;
 }
 
+function normalizeEventSequence(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return String(Math.floor(value));
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const match = /^evt-(\d+)(?:-|$)/.exec(trimmed);
+  return match ? match[1] : null;
+}
+
 function normalizeAgentStatus(type: string): SwarmAgent['status'] {
   switch (type) {
     case 'agent.spawning':
@@ -230,7 +252,10 @@ function createRunSkeleton(
 }
 
 function updateLastEventId(event: MessageEvent, candidateFromEnvelope?: unknown) {
-  const id = normalizeEventCursor(event.lastEventId) ?? normalizeEventCursor(candidateFromEnvelope);
+  const id = normalizeEventSequence(candidateFromEnvelope)
+    ?? normalizeEventSequence(event.lastEventId)
+    ?? normalizeEventCursor(event.lastEventId)
+    ?? normalizeEventCursor(candidateFromEnvelope);
   if (id) {
     useSwarmStore.setState(() => ({
       lastEventId: id,
@@ -282,13 +307,14 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
 
     const { lastEventId } = get();
     const url = getSwarmStreamUrl(pentestId, lastEventId);
+    const apiKey = getDevelopmentApiKey();
     const handleSseEvent = (type: string, event: MessageEvent) => {
       const envelope = parseEventData(event);
       const payload = asRecord(envelope.payload);
       const eventType = String(envelope.eventType || type);
       const runId = String(envelope.runId ?? payload.swarmRunId ?? '');
       const eventTimestamp = Number(envelope.timestamp ?? payload.timestamp) || Date.now();
-      updateLastEventId(event, envelope.id);
+      updateLastEventId(event, envelope.sequence ?? envelope.id);
 
       if (eventType === 'swarm_connected') {
         set({ isConnected: true });
@@ -303,7 +329,7 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
           status === 'ERROR'
             ? 'FAILED'
             : status === 'CANCELLED'
-              ? 'FAILED'
+              ? 'CANCELLED'
               : status === 'COMPLETED'
                 ? 'COMPLETED'
                 : status === 'PAUSED'
@@ -320,7 +346,7 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
             run: {
               ...run,
               status: mappedStatus,
-              endedAt: mappedStatus === 'FAILED' || mappedStatus === 'COMPLETED'
+              endedAt: mappedStatus === 'FAILED' || mappedStatus === 'COMPLETED' || mappedStatus === 'CANCELLED'
                 ? new Date(eventTimestamp).toISOString()
                 : run.endedAt,
             },
@@ -645,6 +671,7 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
     ];
     _eventSource = runtimeClient.connect({
       url,
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
       eventTypes,
       onError: () => {
         set({ isConnected: false, connectionError: 'SSE connection lost' });
@@ -654,7 +681,7 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
         if (type === 'message') {
           const envelope = parseEventData(event);
           const payload = asRecord(envelope.payload);
-          updateLastEventId(event, envelope.id);
+          updateLastEventId(event, envelope.sequence ?? envelope.id);
           if (!payload.content && !payload.source) return;
           const msg: SwarmFeedMessage = {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,

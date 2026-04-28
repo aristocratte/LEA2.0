@@ -13,6 +13,13 @@ interface SSEClient {
   connectedAt: Date;
 }
 
+export interface PersistentSSEEventStore {
+  persist: (
+    pentestId: string,
+    event: SwarmEventEnvelope<SwarmEventPayload>
+  ) => Promise<void> | void;
+}
+
 export class SSEManager {
   // Map<pentestId, Map<clientId, Client>>
   private clients: Map<string, Map<string, SSEClient>> = new Map();
@@ -26,9 +33,25 @@ export class SSEManager {
   private readonly QUEUE_TTL = 5 * 60 * 1000;
   private readonly MAX_QUEUE_SIZE = 1000;
   private traceRecorder: SwarmTraceRecorder | null = null;
+  private persistentEventStore: PersistentSSEEventStore | null = null;
 
   setTraceRecorder(recorder: SwarmTraceRecorder): void {
     this.traceRecorder = recorder;
+  }
+
+  setPersistentEventStore(store: PersistentSSEEventStore | null): void {
+    this.persistentEventStore = store;
+  }
+
+  seedSequence(pentestId: string, sequence: number): void {
+    if (!Number.isFinite(sequence) || sequence < 0) {
+      return;
+    }
+
+    const current = this.eventSequenceByPentest.get(pentestId) || 0;
+    if (sequence > current) {
+      this.eventSequenceByPentest.set(pentestId, Math.floor(sequence));
+    }
   }
 
   /**
@@ -134,6 +157,7 @@ export class SSEManager {
     }
 
     this.traceRecorder?.recordEnvelope(pentestId, event as SwarmEventEnvelope<SwarmEventPayload>);
+    this.persistEnvelope(pentestId, event as SwarmEventEnvelope<SwarmEventPayload>);
 
     return event;
   }
@@ -177,6 +201,19 @@ export class SSEManager {
 
     const parsed = Number.parseInt(match[1], 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  }
+
+  private persistEnvelope(
+    pentestId: string,
+    event: SwarmEventEnvelope<SwarmEventPayload>
+  ): void {
+    if (!this.persistentEventStore) {
+      return;
+    }
+
+    Promise.resolve(this.persistentEventStore.persist(pentestId, event)).catch((error) => {
+      console.warn(`[SSE] Unable to persist event ${event.id}:`, error);
+    });
   }
 
   /**

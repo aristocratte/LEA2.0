@@ -75,50 +75,76 @@ Points importants:
 - `MVP-VERIFY-01` est terminé côté validation; le bug P0 découvert sur l'export PDF est couvert par `REPORT-PDF-EXPORT-01`.
 - Les corrections récentes ont touché des fichiers chauds (`backend/src/index.ts`, `lea-app/app/pentest/page.tsx`, Docker/start). Ne pas les modifier à nouveau sans relire le diff actuel.
 
-## Plan RC Stabilization - décision GPT-5.5 Pro (2026-04-27)
+## Plan RC Stabilization - audit repo GitHub GPT-5.5 Pro (2026-04-27)
 
-**Verdict retenu:** LEA est techniquement avancé, mais pas encore MVP commercialisable tant que le live scan, la source de vérité des événements, stop/cancel et les gates sécurité ne sont pas prouvés sur un parcours continu.
+**Verdict retenu:** LEA est proche d'une RC technique fermée, mais pas encore MVP SaaS commercialisable. Les briques existent déjà; le travail critique est de les converger autour d'une vérité produit unique.
 
-**Règle de phase:** freeze nouvelles features. Les prochains lots doivent stabiliser le MVP pentest, pas étendre LSP/skills/plugins/remote/voice.
+**Point clé nouveau:** ne pas créer un nouvel event log. Le modèle Prisma `PentestEvent` existe déjà avec `event_type`, `event_data`, `sequence` et unicité `pentest_id + sequence`. Il doit devenir la source canonique durable du live scan, du replay et du resume.
+
+**Règle de phase:** freeze nouvelles features. Les prochains lots stabilisent le MVP pentest; LSP, skills, plugins, remote, IDE, voice et marketplace restent internes/expérimentaux.
 
 ### Ordre recommandé
 
 | Ordre | Workstream | Priorité | Statut | Dépendances | Décision |
 |---:|---|---|---|---|---|
-| 1 | `RC-RUN-EVENTLOG-01` | P0 | TODO | aucune | Créer une source canonique `runId + seq` pour events, replay REST et SSE reconnectable. |
-| 2 | `RC-SECURITY-GATES-01` | P0 | TODO | aucune, mais lock backend runtime/security | Durcir auth, scope, Tool Invoke API, MCP/Kali, permission deny en `403`. |
-| 3 | `RC-STOP-CANCEL-01` | P0 | TODO | coordination avec security/runtime | Stop fiable sur le vrai `PentestRun`; cacher pause si non prouvée. |
-| 4 | `RC-LIVE-PERF-01` | P0 | TODO | idéalement après event log | Empêcher freezes: batching, virtualisation/fenêtre DOM, polling réduit, store subscriptions propres. |
-| 5 | `RC-RUNTIME-PROJECTION-01` | P0/P1 | TODO | après event log/perf si possible | Remplacer panels faux/vides par projection produit fiable: status, activity, tools, findings, errors. |
-| 6 | `RC-CREATION-PREFLIGHT-01` | P1 | TODO | aucune forte | State machine new scan; start impossible avant `PREFLIGHT_PASSED`; retry clair. |
-| 7 | `RC-REPORT-EVIDENCE-01` | P1 | TODO | idéalement après event log | Findings avec preuves, statut draft/validated/rejected, exports conservant evidence. |
-| 8 | `RC-RESUME-PERSISTENCE-01` | P1 | TODO | après event log | Resume fiable des runs running/stopped/completed via projection + replay. |
-| 9 | `RC-CUT-LEGACY-UI-DOCS-01` | P1/P2 | TODO | après stabilisation UX principale | Cacher experimental, supprimer legacy visible, aligner docs et surface MVP. |
+| 1 | `RC-EVENTLOG-REPLAY-01` | P0 | DONE / local diff | aucune | `PentestEvent` est utilisé comme vérité durable: append, replay `sinceSeq`, SSE reconnect, reload sans perte. |
+| 2 | `RC-STREAM-AUTH-CORS-01` | P0 | DONE / local diff | aucune, mais lock backend auth/stream | CORS/auth REST et SSE alignés; pas d'origin reflété avec credentials; stream compatible auth prod. |
+| 3 | `RC-SCOPE-GUARD-01` | P0 | DONE / local diff | coordination ToolExecutor/MCP/security | ScopeGuard central pour ToolExecutor, MCP/Kali, Tool Invoke et audit allow/deny. |
+| 4 | `RC-STOP-RUN-01` | P0 | DONE / local diff | après audit runtime stop/scope | Endpoint stop MVP fiable sur le vrai run; pause hors surface MVP. |
+| 5 | `RC-ACTIVE-PROJECTION-01` | P1 | DONE / local diff | après event log | Active Scan consomme `PentestRunProjection` + events, pas directement swarm/agents/tasks. |
+| 6 | `RC-UI-SPLIT-PERF-01` | P1 | DONE / local diff | après projection | Timeline/controls/status isolés et surface Active Scan allégée pour les flux denses. |
+| 7 | `RC-REPORT-EVIDENCE-01` | P1 | DONE / local diff | peut avancer si schema/event log stable | Preuve -> finding -> export renforcé; draft/validated/rejected visibles dans JSON/HTML/PDF. |
+| 8 | `RC-CUT-EXPERIMENTAL-DOCS-01` | P2 | DONE / local diff | dernier | Expérimental caché par défaut, legacy visible retiré, README/docs/endpoints alignés avec le repo réel. |
 
 ### Critères MVP non négociables
 
-- Le flux target -> scope -> config -> review -> preflight -> scan -> findings -> report passe plusieurs fois sans intervention dev.
-- Aucun message live déjà visible ne disparaît après snapshot REST, reconnect SSE ou reload.
-- Reload pendant scan restaure l'historique et reprend le live.
+- `PentestEvent` est la vérité temporelle durable; `SSEManager` est un transport/cache, pas la source produit.
+- `GET /api/pentests/:id/events?sinceSeq=N` lit depuis la DB et fonctionne après expiration de la queue mémoire.
+- Aucun message live déjà visible ne disparaît après snapshot REST, reconnect SSE, reload ou redémarrage serveur.
+- SSE applique la même politique CORS/auth que REST; mode prod auth ON garde le live stream fonctionnel et sécurisé.
 - Stop fonctionne pendant preflight, outil long-running et génération IA; aucun nouvel outil ne démarre après stop.
-- Toutes les exécutions d'outils passent par auth, permissions et scope guard en mode SaaS.
-- Tool Invoke API est admin/dev only ou protégée par auth forte + `pentestRunId` + scope; deny/ask retourne `403`.
+- ScopeGuard bloque domain/subdomain/IP/redirect hors scope sur ToolExecutor, MCP/Kali et Tool Invoke, avec audit.
+- Tool Invoke API reste admin/dev, feature flag false en prod, jamais visible client MVP; sans run/scope/auth = refus.
 - Active Scan n'affiche plus de panels/compteurs faux (`Agents 0`, `Tasks 0`) pendant un scan réel.
 - Findings exportés sont vérifiables ou clairement marqués draft/non validés.
 - Reports JSON/HTML/PDF fonctionnent avec multiline, unicode, longues preuves et findings édités.
-- Runtime extensions, LSP, skills, plugins, hooks et tool invoke manuel sont cachés ou marqués experimental hors MVP client.
+- Runtime extensions, LSP, skills, plugins, hooks, raw MCP, traces swarm et tool invoke manuel sont cachés ou marqués experimental hors MVP client.
+
+### Source de vérité cible
+
+| Domaine | Source MVP |
+|---|---|
+| Temps/live/replay | `PentestEvent` durable avec `sequence` |
+| Conversation lisible | `Message` comme projection, pas vérité unique |
+| Activité outil/audit | `ToolExecution` + `KaliAuditLog` |
+| Valeur client | `Finding` reviewable et evidence-backed |
+| État courant UI | `PentestRunProjection` |
+| Transport live | `SSEManager` comme cache/transport uniquement |
+| Frontend stores | Cache UI, jamais vérité produit |
 
 ### Cut list MVP
 
-- Cacher derrière feature flag: Agents avancés, Teams, Skills, Plugins, LSP, Hooks, Runtime extensions, ToolBrowser complet, Tool Invoke UI, Worktrees, Plan mode avancé, Remote sessions, IDE bridge, Voice, Marketplace.
-- Supprimer ou masquer immédiatement: ancien workflow de création s'il réapparaît, ancien header/nav, panels vides/faux, follow-up prompt pendant scan actif, toute route/UI qui promet une action runtime non alimentée par le flux pentest.
-- Garder en interne: ToolRegistry, ToolExecutor, HookBus, MCP bridge, core swarm générique, RuntimeTaskManager.
+- Cacher maintenant côté UI client: runtime control swarm, traces swarm, Agents/Teams non fiables, Skills, Plugins, LSP, Hooks, raw MCP browser, Tool Invoke, full ToolRegistry browser, Worktrees, Plan mode, Voice, IDE bridge, Remote sessions, Marketplace.
+- Garder uniquement admin/dev: `/api/tools`, `/api/tools/:name`, `/api/tools/:name/invoke`, `/api/hooks`, `/api/plugins`, `/api/skills`, `/api/lsp`, `/api/mcp`, `/api/pentests/:id/swarm/traces`, runtime control avancé.
+- Supprimer ou neutraliser: pause visible non prouvée, CORS manuel permissif sur streams, fallback UI qui invente agents/tasks depuis messages, docs promettant Hooks/LSP/Plugins/Skills comme MVP client.
+- Garder en interne: `PentestSwarm`, `SwarmRuntimeFactory`, traces, ToolRegistry, ToolExecutor, HookBus, MCP bridge, RuntimeTaskManager, SysReptor integration.
+
+### Snapshot final RC Phase 8 (2026-04-28)
+
+- Les huit phases RC sont traitées localement. La phase 8 ferme le plan de stabilisation: surface MVP focalisée, flags expérimentaux ajoutés, README remplacé par une documentation RC réaliste.
+- Les flags frontend par défaut gardent l'expérience client sobre: `NEXT_PUBLIC_LEA_EXPERIMENTAL_UI=false`, `NEXT_PUBLIC_LEA_EXPERIMENTAL_RUNTIME_UI=false`, `NEXT_PUBLIC_LEA_ADVANCED_SCAN_CONTROLS=false`.
+- La sidebar MVP expose Active Scan, Reports et Settings. Le Dashboard historique reste disponible en route, mais n'est plus vendu dans la navigation par défaut tant que ses métriques ne sont pas entièrement produit.
+- `/settings` reste centré providers; la console runtime extensions est admin/dev.
+- `/pentest` cache Plan Mode, Worktree, Checkpoints et Analytics par défaut; Stop, permissions, exports et projection de run restent visibles.
+- Le preflight masque le lancement swarm par défaut et présente le moteur d'exécution avec une copie produit, sans exposer "Kali MCP" comme concept client.
+- Prochaine étape après cette phase: validation RC complète sur environnement propre, puis décision de release/merge. Ne pas ouvrir de nouvelle feature avant cette validation.
 
 ### Locks de parallélisation RC
 
-- `RC-RUN-EVENTLOG-01`, `RC-LIVE-PERF-01`, `RC-RUNTIME-PROJECTION-01` et `RC-RESUME-PERSISTENCE-01` ne doivent pas éditer simultanément `/Users/aris/Documents/LEA/lea-app/app/pentest/page.tsx`, `/Users/aris/Documents/LEA/lea-app/store/swarm-store.ts`, `/Users/aris/Documents/LEA/lea-app/hooks/use-pentest-stream.ts`, `/Users/aris/Documents/LEA/backend/src/services/SSEManager.ts`.
-- `RC-SECURITY-GATES-01` et `RC-STOP-CANCEL-01` ne doivent pas éditer simultanément `/Users/aris/Documents/LEA/backend/src/index.ts`, `/Users/aris/Documents/LEA/backend/src/types/fastify.d.ts`, `/Users/aris/Documents/LEA/backend/src/routes/pentests.ts`, `/Users/aris/Documents/LEA/backend/src/services/PentestOrchestrator.ts`, `/Users/aris/Documents/LEA/backend/src/services/PentestAgent.ts`.
-- `RC-CUT-LEGACY-UI-DOCS-01` doit être lancé après les lots UI/runtime principaux, pas avant.
+- `RC-EVENTLOG-REPLAY-01`, `RC-ACTIVE-PROJECTION-01` et `RC-UI-SPLIT-PERF-01` ne doivent pas éditer simultanément `/Users/aris/Documents/LEA/backend/src/services/SSEManager.ts`, `/Users/aris/Documents/LEA/backend/src/routes/stream.ts`, `/Users/aris/Documents/LEA/backend/src/routes/pentests.ts`, `/Users/aris/Documents/LEA/backend/src/services/PentestOrchestrator.ts`, `/Users/aris/Documents/LEA/lea-app/hooks/use-pentest-stream.ts`, `/Users/aris/Documents/LEA/lea-app/store/swarm-store.ts`, `/Users/aris/Documents/LEA/lea-app/store/pentest-store.ts`.
+- `RC-STREAM-AUTH-CORS-01`, `RC-SCOPE-GUARD-01` et `RC-STOP-RUN-01` ne doivent pas éditer simultanément `/Users/aris/Documents/LEA/backend/src/index.ts`, `/Users/aris/Documents/LEA/backend/src/routes/stream.ts`, `/Users/aris/Documents/LEA/backend/src/routes/swarm.ts`, `/Users/aris/Documents/LEA/backend/src/routes/tool-invoke.ts`, ToolExecutor/PermissionEngine/MCP/Kali files.
+- `RC-REPORT-EVIDENCE-01` peut avancer en parallèle si personne ne modifie le schema Prisma/event log.
+- `RC-CUT-EXPERIMENTAL-DOCS-01` doit être lancé en dernier, sinon la doc documentera un état mouvant.
 
 ## Règles de parallélisation
 

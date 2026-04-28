@@ -18,6 +18,8 @@ interface ReportWithRelations extends Report {
   findings: Finding[];
 }
 
+type FindingReviewState = 'validated' | 'draft' | 'rejected';
+
 export class ExportService {
 
   /**
@@ -113,21 +115,18 @@ export class ExportService {
     y -= 30;
 
     // Stats box
-    const stats = {
-      total: report.findings.length,
-      critical: report.findings.filter(f => f.severity === 'CRITICAL').length,
-      high: report.findings.filter(f => f.severity === 'HIGH').length,
-      medium: report.findings.filter(f => f.severity === 'MEDIUM').length,
-      low: report.findings.filter(f => f.severity === 'LOW').length,
-    };
+    const stats = this.buildExportStats(report.findings);
 
     addText('Summary', { font: helveticaBold, size: 14 });
     y -= 5;
     addText(`Total Findings: ${stats.total}`, { size: 12 });
-    addText(`Critical: ${stats.critical}`, { size: 12, color: colors.red });
-    addText(`High: ${stats.high}`, { size: 12, color: colors.orange });
-    addText(`Medium: ${stats.medium}`, { size: 12, color: colors.yellow });
-    addText(`Low: ${stats.low}`, { size: 12, color: colors.green });
+    addText(`Validated: ${stats.review.validated}`, { size: 12, color: colors.green });
+    addText(`Draft / Needs Review: ${stats.review.draft}`, { size: 12, color: colors.orange });
+    addText(`Evidence Missing: ${stats.evidence.missing}`, { size: 12, color: colors.red });
+    addText(`Critical: ${stats.bySeverity.CRITICAL}`, { size: 12, color: colors.red });
+    addText(`High: ${stats.bySeverity.HIGH}`, { size: 12, color: colors.orange });
+    addText(`Medium: ${stats.bySeverity.MEDIUM}`, { size: 12, color: colors.yellow });
+    addText(`Low: ${stats.bySeverity.LOW}`, { size: 12, color: colors.green });
     y -= 30;
 
     // ========================================
@@ -164,12 +163,32 @@ export class ExportService {
       y -= 10;
 
       findings.forEach((finding, index) => {
+        const reviewState = this.getFindingReviewState(finding);
+        const location = this.getFindingLocation(finding);
+        const source = finding.tool_used || finding.phase_name || finding.source_signal_type || 'LEA analysis';
+
         // Finding title
         addText(`${index + 1}. ${finding.title}`, {
           font: helveticaBold,
           size: 11,
         });
         y -= 5;
+
+        addText(
+          `Review: ${this.getFindingReviewLabel(finding)} | Evidence: ${this.hasEvidence(finding) ? 'present' : 'missing'} | Score: ${finding.evidence_score ?? 0}`,
+          {
+            size: 8,
+            color: reviewState === 'validated' ? colors.green : colors.orange,
+            maxWidth: width - margin * 2 - 20,
+          }
+        );
+
+        addText(`Location: ${location} | Source: ${source}`, {
+          size: 8,
+          color: colors.gray,
+          maxWidth: width - margin * 2 - 20,
+        });
+        y -= 3;
 
         // Description
         if (finding.description) {
@@ -187,6 +206,25 @@ export class ExportService {
             color: colors.gray,
           });
           y -= 3;
+        }
+
+        // Evidence
+        if (finding.evidence) {
+          addText('Evidence:', { font: helveticaBold, size: 9 });
+          addText(finding.evidence, {
+            font: courier,
+            size: 8,
+            color: colors.black,
+            maxWidth: width - margin * 2 - 20,
+          });
+          y -= 5;
+        } else {
+          addText('Evidence: missing - keep this finding in review before client delivery.', {
+            size: 9,
+            color: colors.red,
+            maxWidth: width - margin * 2 - 20,
+          });
+          y -= 5;
         }
 
         // Remediation
@@ -266,10 +304,12 @@ export class ExportService {
   async generateHtml(report: ReportWithRelations): Promise<string> {
     const template = this.getHtmlTemplate();
     const compiled = handlebars.compile(template);
+    const exportReport = this.buildTemplateReport(report);
 
     return compiled({
-      report,
+      report: exportReport,
       generatedAt: new Date().toISOString(),
+      stats: this.buildExportStats(report.findings),
       severityColor: (severity: string) => {
         const colors: Record<string, string> = {
           CRITICAL: '#ff4757',
@@ -287,6 +327,8 @@ export class ExportService {
    * GÉNÈRE UN JSON POUR API
    */
   generateJson(report: ReportWithRelations): object {
+    const stats = this.buildExportStats(report.findings);
+
     return {
       metadata: {
         id: report.id,
@@ -299,25 +341,142 @@ export class ExportService {
         executiveSummary: report.executive_summary,
         methodology: report.methodology,
       },
-      statistics: report.stats,
+      statistics: stats,
       findings: report.findings.map(f => ({
         id: f.id,
         title: f.title,
         severity: f.severity,
         category: f.category,
+        status: f.status,
+        review: {
+          state: this.getFindingReviewState(f),
+          label: this.getFindingReviewLabel(f),
+          verified: f.verified,
+          falsePositive: f.false_positive,
+          verificationState: f.verification_state,
+          evidenceScore: f.evidence_score,
+          reasonCodes: f.reason_codes,
+        },
         cvss: {
           score: f.cvss_score,
           vector: f.cvss_vector,
         },
         cve: f.cve_id,
         cwe: f.cwe_id,
+        location: {
+          targetHost: f.target_host,
+          endpoint: f.endpoint,
+          port: f.port,
+          protocol: f.protocol,
+          display: this.getFindingLocation(f),
+        },
+        source: {
+          phaseName: f.phase_name,
+          toolUsed: f.tool_used,
+          sourceSignalType: f.source_signal_type,
+        },
         description: f.description,
         evidence: f.evidence,
+        hasEvidence: this.hasEvidence(f),
         impact: f.impact,
         remediation: f.remediation,
         discoveredAt: f.discovered_at,
       })),
     };
+  }
+
+  private buildTemplateReport(report: ReportWithRelations): ReportWithRelations & { findings: Array<Finding & {
+    review_state: FindingReviewState;
+    review_label: string;
+    has_evidence: boolean;
+    location_display: string;
+    source_display: string;
+  }> } {
+    return {
+      ...report,
+      findings: report.findings.map((finding) => ({
+        ...finding,
+        review_state: this.getFindingReviewState(finding),
+        review_label: this.getFindingReviewLabel(finding),
+        has_evidence: this.hasEvidence(finding),
+        location_display: this.getFindingLocation(finding),
+        source_display: finding.tool_used || finding.phase_name || finding.source_signal_type || 'LEA analysis',
+      })),
+    };
+  }
+
+  private buildExportStats(findings: Finding[]) {
+    const bySeverity = {
+      CRITICAL: 0,
+      HIGH: 0,
+      MEDIUM: 0,
+      LOW: 0,
+      INFORMATIONAL: 0,
+    };
+    const review = {
+      validated: 0,
+      draft: 0,
+      rejected: 0,
+    };
+    const evidence = {
+      present: 0,
+      missing: 0,
+    };
+
+    findings.forEach((finding) => {
+      bySeverity[finding.severity] += 1;
+      review[this.getFindingReviewState(finding)] += 1;
+      if (this.hasEvidence(finding)) evidence.present += 1;
+      else evidence.missing += 1;
+    });
+
+    return {
+      total: findings.length,
+      bySeverity,
+      review,
+      evidence,
+    };
+  }
+
+  private getFindingReviewState(finding: Finding): FindingReviewState {
+    if (
+      finding.verification_state === 'REJECTED'
+      || finding.false_positive
+      || finding.status === 'FALSE_POSITIVE'
+    ) {
+      return 'rejected';
+    }
+
+    if (
+      finding.verification_state === 'CONFIRMED'
+      || finding.verified
+      || finding.status === 'CONFIRMED'
+    ) {
+      return 'validated';
+    }
+
+    return 'draft';
+  }
+
+  private getFindingReviewLabel(finding: Finding): string {
+    const state = this.getFindingReviewState(finding);
+    if (state === 'validated') return 'Validated';
+    if (state === 'rejected') return 'Rejected';
+    return 'Draft / Needs Review';
+  }
+
+  private hasEvidence(finding: Finding): boolean {
+    return Boolean(finding.evidence?.trim());
+  }
+
+  private getFindingLocation(finding: Finding): string {
+    const host = finding.target_host || 'target';
+    const endpoint = finding.endpoint || '';
+    const service = finding.port
+      ? `${finding.protocol || 'tcp'}/${finding.port}`
+      : '';
+
+    return [host, endpoint, service].filter(Boolean).join(' ');
   }
 
   /**
@@ -423,6 +582,28 @@ export class ExportService {
     .badge.MEDIUM { background: #fef08a; color: #854d0e; }
     .badge.LOW { background: #dbeafe; color: #1e40af; }
     .badge.INFORMATIONAL { background: #e5e7eb; color: #374151; }
+    .review-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0 14px;
+      font-size: 12px;
+    }
+    .review-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid #e5e7eb;
+      padding: 3px 10px;
+      background: #fff;
+      color: #374151;
+      font-weight: 600;
+    }
+    .review-badge.validated { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+    .review-badge.draft { border-color: #fed7aa; background: #fff7ed; color: #9a3412; }
+    .review-badge.rejected { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+    .review-badge.missing { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+    .review-badge.present { border-color: #bfdbfe; background: #eff6ff; color: #1e40af; }
     .finding-section {
       margin: 15px 0;
     }
@@ -460,7 +641,7 @@ export class ExportService {
     </div>
 
     <div class="stats">
-      {{#each (array "Critical" "High" "Medium" "Low" "Info") as |s|}}
+      {{#each (array "Critical" "High" "Medium" "Low" "Informational") as |s|}}
       <div class="stat-box">
         <div class="stat-value">{{countSeverity ../report.findings s}}</div>
         <div class="stat-label">{{s}}</div>
@@ -480,11 +661,25 @@ export class ExportService {
         <div class="finding-title">{{finding.title}}</div>
         <span class="badge {{finding.severity}}">{{finding.severity}}</span>
       </div>
+      <div class="review-row">
+        <span class="review-badge {{finding.review_state}}">{{finding.review_label}}</span>
+        <span class="review-badge {{#if finding.has_evidence}}present{{else}}missing{{/if}}">
+          Evidence {{#if finding.has_evidence}}present{{else}}missing{{/if}}
+        </span>
+        <span class="review-badge">Score {{finding.evidence_score}}</span>
+        <span class="review-badge">Location {{finding.location_display}}</span>
+        <span class="review-badge">Source {{finding.source_display}}</span>
+      </div>
       <p>{{finding.description}}</p>
       {{#if finding.evidence}}
       <div class="finding-section">
         <h4>Evidence:</h4>
         <pre>{{finding.evidence}}</pre>
+      </div>
+      {{else}}
+      <div class="finding-section">
+        <h4>Evidence:</h4>
+        <p><strong>Missing.</strong> Keep this finding in review before client delivery.</p>
       </div>
       {{/if}}
       {{#if finding.remediation}}

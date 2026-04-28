@@ -61,6 +61,7 @@ export interface SwarmRuntime {
 }
 
 export interface PendingApproval {
+  pentestId: string;
   resolve: () => void;
   reject: (reason: string) => void;
   timeout: ReturnType<typeof setTimeout>;

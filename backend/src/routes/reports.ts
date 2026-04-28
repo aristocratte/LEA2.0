@@ -19,6 +19,59 @@ import type { FindingStatus, ReportStatus, Severity } from '../types/index.js';
 const reportService = new ReportService();
 const exportService = new ExportService();
 
+const exportFindingsQuery = {
+  where: { verification_state: { not: 'REJECTED' as const } },
+  orderBy: [
+    { severity: 'asc' as const },
+    { evidence_score: 'desc' as const },
+    { cvss_score: 'desc' as const },
+    { updated_at: 'desc' as const },
+  ],
+};
+
+const manualReviewReason = 'manual_edit_requires_reverification';
+
+function sanitizeReportFilenamePart(value: string): string {
+  const sanitized = value
+    .replace(/[\r\n"]/g, '')
+    .replace(/[^a-z0-9._-]+/gi, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 120);
+
+  return sanitized || 'target';
+}
+
+function mapFindingStatusToReviewState(status: FindingStatus): Prisma.FindingUpdateInput {
+  if (status === 'CONFIRMED') {
+    return {
+      status,
+      verification_state: 'CONFIRMED',
+      verified: true,
+      false_positive: false,
+    };
+  }
+
+  if (status === 'FALSE_POSITIVE') {
+    return {
+      status,
+      verification_state: 'REJECTED',
+      verified: false,
+      false_positive: true,
+    };
+  }
+
+  if (status === 'OPEN') {
+    return {
+      status,
+      verification_state: 'PROVISIONAL',
+      verified: false,
+      false_positive: false,
+    };
+  }
+
+  return { status };
+}
+
 export async function reportRoutes(fastify: FastifyInstance) {
 
   // ========================================
@@ -206,7 +259,14 @@ export async function reportRoutes(fastify: FastifyInstance) {
     const body = schema.parse(request.body);
     const existing = await fastify.prisma.finding.findFirst({
       where: { id: findingId, report_id: id },
-      select: { id: true },
+      select: {
+        id: true,
+        evidence: true,
+        target_host: true,
+        endpoint: true,
+        port: true,
+        protocol: true,
+      },
     });
 
     if (!existing) {
@@ -229,7 +289,23 @@ export async function reportRoutes(fastify: FastifyInstance) {
     if (body.endpoint !== undefined) data.endpoint = body.endpoint;
     if (body.port !== undefined) data.port = body.port;
     if (body.protocol !== undefined) data.protocol = body.protocol;
-    if (body.status !== undefined) data.status = body.status as FindingStatus;
+    const evidenceOrContextChanged = (
+      (body.evidence !== undefined && body.evidence !== existing.evidence)
+      || (body.target_host !== undefined && body.target_host !== existing.target_host)
+      || (body.endpoint !== undefined && body.endpoint !== existing.endpoint)
+      || (body.port !== undefined && body.port !== existing.port)
+      || (body.protocol !== undefined && body.protocol !== existing.protocol)
+    );
+
+    if (body.status !== undefined) {
+      Object.assign(data, mapFindingStatusToReviewState(body.status as FindingStatus));
+    } else if (evidenceOrContextChanged) {
+      data.verification_state = 'PROVISIONAL';
+      data.verified = false;
+      data.false_positive = false;
+      data.evidence_score = 0;
+      data.reason_codes = [manualReviewReason];
+    }
 
     const finding = await fastify.prisma.finding.update({
       where: { id: findingId },
@@ -262,7 +338,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
       where: { id },
       include: {
         pentest: true,
-        findings: { orderBy: [{ severity: 'asc' }, { cvss_score: 'desc' }] },
+        findings: exportFindingsQuery,
       },
     });
 
@@ -273,8 +349,9 @@ export async function reportRoutes(fastify: FastifyInstance) {
     try {
       const pdfBuffer = await exportService.generatePdf(report as Parameters<typeof exportService.generatePdf>[0]);
 
+      const filenameTarget = sanitizeReportFilenamePart(report.pentest.target);
       reply.header('Content-Type', 'application/pdf');
-      reply.header('Content-Disposition', `attachment; filename="report-${report.pentest.target}.pdf"`);
+      reply.header('Content-Disposition', `attachment; filename="report-${filenameTarget}.pdf"`);
       return reply.send(pdfBuffer);
     } catch (error) {
       console.error('PDF export error:', error);
@@ -292,7 +369,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
       where: { id },
       include: {
         pentest: true,
-        findings: true,
+        findings: exportFindingsQuery,
       },
     });
 
@@ -300,10 +377,11 @@ export async function reportRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: 'Report not found' });
     }
 
+    const filenameTarget = sanitizeReportFilenamePart(report.pentest.target);
     const html = await exportService.generateHtml(report as Parameters<typeof exportService.generateHtml>[0]);
 
     reply.header('Content-Type', 'text/html');
-    reply.header('Content-Disposition', `attachment; filename="report-${report.pentest.target}.html"`);
+    reply.header('Content-Disposition', `attachment; filename="report-${filenameTarget}.html"`);
     return reply.send(html);
   });
 
@@ -317,7 +395,7 @@ export async function reportRoutes(fastify: FastifyInstance) {
       where: { id },
       include: {
         pentest: true,
-        findings: true,
+        findings: exportFindingsQuery,
       },
     });
 

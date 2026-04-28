@@ -66,6 +66,8 @@ Note Session 4: la passe DOCS-01 du 2026-04-26 garde cette feuille au niveau UI 
 
 Note post-stabilisation 2026-04-27: les surfaces Active Scan, providers, reports et runtime extensions ont été stabilisées par sessions parallèles puis relues. Le typecheck frontend, le lint frontend et la suite Vitest frontend (`420 passed`) sont verts; le backend de support est également vert avec `1086 passed`, `1 skipped`. `DOCS-03` synchronise cette feuille avec l'état réel après Session 10, Session 11 et `REPORT-PDF-EXPORT-01`.
 
+Note RC finale 2026-04-28: la phase `RC-CUT-EXPERIMENTAL-DOCS-01` cache les surfaces expérimentales par défaut. Cette feuille UI reste une roadmap longue; elle ne doit pas être lue comme une liste de features visibles dans le MVP client.
+
 | Bloc UI | Statut réel | Lecture opérationnelle |
 |---|---|---|
 | UI A - shell, workspace, input, status, search | PARTIAL / avancé | La shell moderne existe et l'ancienne UI a commencé à être retirée. Le workspace pentest doit rester la surface canonique unique. |
@@ -89,32 +91,42 @@ Définitions utilisées:
 5. Correctif smoke post-MVP: le bouton de lancement review ne tente plus `/start` avant que `preflight_state=PASSED` soit réellement persisté.
 6. Remote, IDE et voice restent en backlog après le MVP stabilisé.
 
-## Phase UI RC Stabilization - décision GPT-5.5 Pro (2026-04-27)
+## Phase UI RC Stabilization - audit repo GitHub GPT-5.5 Pro (2026-04-27)
 
 La priorité UI passe de "montrer toutes les capacités" à "inspirer confiance pendant un pentest réel". Le MVP doit cacher les surfaces expérimentales tant qu'elles ne sont pas alimentées par des données garanties.
 
 Ordre UI retenu:
 
-1. `RC-LIVE-PERF-01`: timeline fluide, messages bornés/virtualisés, deltas batchés et polling secondaire réduit.
-2. `RC-RUNTIME-PROJECTION-01`: panneau Active Scan basé sur status, phase, scope, tool activity, findings et erreurs, pas sur des agents/tasks vides.
-3. `RC-CREATION-PREFLIGHT-01`: un seul workflow de création avec preflight inline, retry clair et start bloqué tant que le preflight n'est pas `PASSED`.
-4. `RC-REPORT-EVIDENCE-01`: reports et findings orientés preuve, avec statuts draft/validated/rejected visibles.
-5. `RC-RESUME-PERSISTENCE-01`: reprise fiable depuis les sessions récentes, y compris reload pendant run.
-6. `RC-CUT-LEGACY-UI-DOCS-01`: suppression des anciennes surfaces visibles et feature flags pour l'expérimental.
+1. `RC-EVENTLOG-REPLAY-01`: adapter le live à `PentestEvent` durable; reload/reconnect ne doivent jamais faire disparaître un message.
+2. `RC-ACTIVE-PROJECTION-01`: panneau Active Scan basé sur `PentestRunProjection` (status, phase, scope, tool activity, findings, erreurs), pas sur des agents/tasks vides.
+3. `RC-UI-SPLIT-PERF-01`: découper `active-screen.tsx` après stabilisation du contrat: `LiveTimeline`, `RunStatusPanel`, `RunControls`, `ToolActivityPanel`, `StreamConnectionStatus`.
+4. `RC-STOP-RUN-01`: Stop visible et fiable; Pause cachée tant qu'elle n'est pas prouvée.
+5. `RC-REPORT-EVIDENCE-01`: reports et findings orientés preuve, avec statuts draft/validated/rejected visibles.
+6. `RC-CUT-EXPERIMENTAL-DOCS-01`: suppression des anciennes surfaces visibles et feature flags pour l'expérimental.
 
 Décisions UI MVP:
 
-- Cacher par défaut Agents avancés, Teams, Skills, Plugins, LSP, Hooks, Runtime extensions, ToolBrowser complet, Tool Invoke UI, Worktrees, Plan mode avancé, Remote, IDE, Voice et Marketplace.
+- Cacher par défaut runtime control swarm, traces swarm, Agents/Teams non fiables, Skills, Plugins, LSP, Hooks, raw MCP, Tool Invoke UI, ToolRegistry complet, Worktrees, Plan mode avancé, Remote, IDE, Voice et Marketplace.
 - Active Scan doit afficher une timeline live + une projection de run fiable; aucun compteur `0` faux ou panel vide sans explication.
 - Les follow-up prompts et l'input d'instructions supplémentaires restent indisponibles pendant un scan actif.
 - Les reports doivent distinguer findings draft et findings validés, et conserver les preuves dans JSON/HTML/PDF.
 - Les anciennes navigations/headers ne doivent plus réapparaître sur les surfaces MVP.
+- Le frontend store est un cache UI; la vérité vient de `PentestEvent`, `PentestRunProjection`, `ToolExecution`/`KaliAuditLog` et `Finding`.
 
 Risques UI restants:
 
 - La shell et les panneaux sont présents, mais l'expérience doit encore être prouvée dans un parcours pentest continu, pas seulement par tests de composants.
 - Les surfaces runtime extensions sont visibles; leur utilisabilité dépend d'une validation produit de MCP/LSP/skills/plugins.
 - Les fichiers chauds UI (`lea-app/app/pentest/page.tsx`, `lea-app/app/settings/page.tsx`, `lea-app/app/reports/page.tsx`) ne doivent pas être retouchés hors lot dédié.
+
+État après `RC-CUT-EXPERIMENTAL-DOCS-01`:
+
+- La sidebar MVP évite les surfaces historiques ou non prouvées par défaut; Active Scan, Reports et Settings restent les chemins client principaux.
+- `/settings` garde les providers au premier plan et masque la console runtime extensions sauf opt-in admin/dev.
+- `/pentest` garde Stop, permissions, exports, timeline et projection de run visibles; Plan Mode, Worktree, Checkpoints et Analytics sont derrière flag.
+- Le preflight privilégie le lancement standard et masque le lancement swarm multi-agents hors opt-in expérimental.
+- Les flags frontend de référence sont `NEXT_PUBLIC_LEA_EXPERIMENTAL_UI`, `NEXT_PUBLIC_LEA_EXPERIMENTAL_RUNTIME_UI` et `NEXT_PUBLIC_LEA_ADVANCED_SCAN_CONTROLS`.
+- La prochaine étape UI n'est plus une nouvelle phase, mais un smoke complet navigateur sur environnement propre et une décision de release candidate.
 
 ## Phase UI 0
 

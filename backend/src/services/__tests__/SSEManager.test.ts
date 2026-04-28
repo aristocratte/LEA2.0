@@ -1,7 +1,42 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SSEManager } from '../SSEManager.js';
 
 describe('SSEManager replay retention', () => {
+  it('seeds sequences from durable storage before emitting new events', () => {
+    const manager = new SSEManager();
+
+    manager.seedSequence('pt-1', 41);
+
+    const event = manager.emit('pt-1', {
+      runId: 'pt-1',
+      source: 'system',
+      audience: 'internal',
+      surfaceHint: 'activity',
+      eventType: 'status_change',
+      payload: { type: 'status_change', status: 'RUNNING' },
+    });
+
+    expect(event.sequence).toBe(42);
+    expect(event.id).toMatch(/^evt-42-/);
+  });
+
+  it('persists emitted envelopes through the configured persistent event store', () => {
+    const manager = new SSEManager();
+    const persist = vi.fn().mockResolvedValue(undefined);
+    manager.setPersistentEventStore({ persist });
+
+    const event = manager.emit('pt-1', {
+      runId: 'pt-1',
+      source: 'system',
+      audience: 'internal',
+      surfaceHint: 'activity',
+      eventType: 'status_change',
+      payload: { type: 'status_change', status: 'RUNNING' },
+    });
+
+    expect(persist).toHaveBeenCalledWith('pt-1', event);
+  });
+
   it('keeps event replay state after the last client disconnects', () => {
     const manager = new SSEManager();
     const received: Array<{ event: string; id?: string; payload: unknown }> = [];

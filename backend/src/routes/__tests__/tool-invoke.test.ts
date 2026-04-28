@@ -48,6 +48,7 @@ async function buildApp(options?: {
   registry?: ToolRegistry;
   executor?: ToolExecutor;
   rtm?: RuntimeTaskManager;
+  prisma?: unknown;
 }) {
   const fastify = Fastify({ logger: false });
 
@@ -63,6 +64,9 @@ async function buildApp(options?: {
 
   (fastify as any).toolRegistry = registry;
   (fastify as any).apiToolExecutor = executor;
+  if (options?.prisma) {
+    (fastify as any).prisma = options.prisma;
+  }
 
   await fastify.register(toolInvokeRoutes);
   await fastify.ready();
@@ -333,6 +337,85 @@ describe('C9 — Tool Invoke Route', () => {
 
         expect(res.status).toBe(403);
         expect(res.body.error).toContain('denied');
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('requires pentestId for MCP invocation even when policy allows MCP tools', async () => {
+      process.env.LEA_TOOL_INVOKE_ALLOW = 'mcp:*';
+      delete process.env.LEA_TOOL_INVOKE_DENY;
+
+      const call = vi.fn(async () => ({ data: 'should not execute' }));
+      const registry = new ToolRegistry();
+      registry.register(
+        buildTool({
+          name: 'mcp:nmap_scan',
+          description: 'Nmap scanner',
+          source: 'mcp',
+          inputSchema: z.object({ target: z.string() }),
+          call,
+          maxResultSizeChars: 10_000,
+        }),
+      );
+
+      const app = await buildApp({ registry });
+      try {
+        const res = await invoke(app, '/api/tools/mcp:nmap_scan/invoke')
+          .send({ input: { target: 'outside.example.com' } });
+
+        expect(res.status).toBe(403);
+        expect(res.body.error).toContain('pentestId');
+        expect(call).not.toHaveBeenCalled();
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('loads MCP runtime scope from pentestId and ignores client-provided context', async () => {
+      process.env.LEA_TOOL_INVOKE_ALLOW = 'mcp:*';
+      delete process.env.LEA_TOOL_INVOKE_DENY;
+
+      const call = vi.fn(async () => ({ data: 'should not execute' }));
+      const registry = new ToolRegistry();
+      registry.register(
+        buildTool({
+          name: 'mcp:nmap_scan',
+          description: 'Nmap scanner',
+          source: 'mcp',
+          inputSchema: z.object({ target: z.string() }),
+          call,
+          maxResultSizeChars: 10_000,
+        }),
+      );
+
+      const prisma = {
+        pentest: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: 'pentest-1',
+            target: 'app.example.com',
+            scope: { inScope: ['app.example.com'], outOfScope: [] },
+          }),
+        },
+      };
+
+      const app = await buildApp({ registry, prisma });
+      try {
+        const res = await invoke(app, '/api/tools/mcp:nmap_scan/invoke')
+          .send({
+            input: { target: 'outside.example.com' },
+            pentestId: 'pentest-1',
+            context: { inScope: ['outside.example.com'] },
+          });
+
+        expect(res.status).toBe(403);
+        expect(res.body.success).toBe(false);
+        expect(res.body.error.code).toBe('scope_denied');
+        expect(call).not.toHaveBeenCalled();
+        expect(prisma.pentest.findUnique).toHaveBeenCalledWith({
+          where: { id: 'pentest-1' },
+          select: { id: true, target: true, scope: true },
+        });
       } finally {
         await app.close();
       }

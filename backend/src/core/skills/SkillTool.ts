@@ -154,6 +154,29 @@ function evaluateSkillStepPolicy(toolName: string): { allowed: true } | { allowe
   return { allowed: true };
 }
 
+function forwardRuntimeScopeContext(context: ToolUseContext): Record<string, unknown> | undefined {
+  const keys = [
+    'pentestId',
+    'target',
+    'inScope',
+    'outOfScope',
+    'pendingScopeDomains',
+    'scopeMode',
+    'allowPrivateTargets',
+    'allowLocalTargets',
+    'mcpContext',
+  ];
+  const forwarded: Record<string, unknown> = {};
+
+  for (const key of keys) {
+    if (context[key] !== undefined) {
+      forwarded[key] = context[key];
+    }
+  }
+
+  return Object.keys(forwarded).length > 0 ? forwarded : undefined;
+}
+
 export function createSkillTool(
   definition: SkillDefinition,
   options: SkillToolOptions,
@@ -204,6 +227,7 @@ export function createSkillTool(
           provider: context.provider,
           agentId: context.agentId,
           cwd: context.cwd,
+          runtimeContext: forwardRuntimeScopeContext(context),
         });
 
         const resultText = String(result.event.result ?? '');

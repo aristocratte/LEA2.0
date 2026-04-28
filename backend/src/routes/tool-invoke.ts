@@ -34,6 +34,7 @@ import { randomUUID } from 'node:crypto';
 import type { ToolRegistry } from '../core/runtime/ToolRegistry.js';
 import type { ToolExecutor } from '../core/runtime/ToolExecutor.js';
 import type { Tool } from '../core/types/tool-types.js';
+import { parseJsonWithSchema, pentestScopeSchema } from '../types/schemas.js';
 
 // ============================================
 // HELPERS
@@ -57,7 +58,8 @@ function isPermissionDenied(errorCode: string | undefined): boolean {
   return (
     errorCode === 'permission_denied' ||
     errorCode === 'permission_denied_by_user' ||
-    errorCode === 'permission_approval_required'
+    errorCode === 'permission_approval_required' ||
+    errorCode === 'scope_denied'
   );
 }
 
@@ -129,13 +131,46 @@ function getToolInvokeTimeoutMs(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
 }
 
+function requiresTrustedScope(tool: Tool): boolean {
+  return tool.source === 'mcp';
+}
+
+async function buildTrustedRuntimeContext(
+  fastify: FastifyInstance,
+  pentestId: string | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  if (!pentestId) return undefined;
+
+  const pentest = await fastify.prisma.pentest.findUnique({
+    where: { id: pentestId },
+    select: { id: true, target: true, scope: true },
+  });
+
+  if (!pentest) {
+    return undefined;
+  }
+
+  const scope = parseJsonWithSchema(pentestScopeSchema, pentest.scope, {
+    inScope: [],
+    outOfScope: [],
+  });
+
+  return {
+    pentestId: pentest.id,
+    target: pentest.target,
+    inScope: scope.inScope,
+    outOfScope: scope.outOfScope,
+    scopeMode: 'extended',
+  };
+}
+
 // ============================================
 // ROUTES
 // ============================================
 
 export async function toolInvokeRoutes(fastify: FastifyInstance): Promise<void> {
   // POST /api/tools/:name/invoke — execute a tool via the runtime pipeline
-  fastify.post<{ Params: { name: string }; Body: { input?: unknown; sessionId?: string; agentId?: string; context?: Record<string, unknown> } }>(
+  fastify.post<{ Params: { name: string }; Body: { input?: unknown; sessionId?: string; agentId?: string; pentestId?: string; context?: Record<string, unknown> } }>(
     '/api/tools/:name/invoke',
     async (request, reply) => {
       if (!isInvokeApiEnabled()) {
@@ -180,6 +215,15 @@ export async function toolInvokeRoutes(fastify: FastifyInstance): Promise<void> 
         return reply.code(403).send({ error: policy.reason });
       }
 
+      if (requiresTrustedScope(tool) && !body.pentestId) {
+        return reply.code(403).send({ error: `Tool "${canonicalName}" requires pentestId for trusted runtime scope` });
+      }
+
+      const trustedRuntimeContext = await buildTrustedRuntimeContext(fastify, body.pentestId);
+      if (body.pentestId && !trustedRuntimeContext) {
+        return reply.code(404).send({ error: `Pentest "${body.pentestId}" not found` });
+      }
+
       // Generate IDs
       const toolUseId = `api-${randomUUID()}`;
       const sessionId = body.sessionId ?? `api-${randomUUID()}`;
@@ -206,7 +250,7 @@ export async function toolInvokeRoutes(fastify: FastifyInstance): Promise<void> 
             sessionId,
             abortController,
             agentId: body.agentId,
-            runtimeContext: body.context,
+            runtimeContext: trustedRuntimeContext,
           }),
           timeoutPromise,
         ]);

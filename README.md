@@ -1,624 +1,211 @@
-# LEA Platform - AI-Powered Pentest Automation
+# LEA Platform
 
-<div align="center">
+LEA is in RC stabilization for a pentest MVP. The client-facing product is intentionally focused:
 
-![LEA Platform](https://img.shields.io/badge/LEA-Platform-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/version-1.0.0-green?style=for-the-badge)
-![License](https://img.shields.io/badge/license-MIT-orange?style=for-the-badge)
+1. Configure an AI provider and model.
+2. Create a pentest with target, scope, model and effort.
+3. Run preflight checks before execution.
+4. Start and stop a live scan.
+5. Review live events, tool activity, errors and evidence-backed findings.
+6. Edit, validate or reject findings.
+7. Export reports as JSON, HTML or PDF.
+8. Resume recent sessions without losing context.
 
-**AI-Orchestrated Penetration Testing Platform with Real MCP Kali Linux Integration**
+Advanced runtime capabilities exist in the codebase, but they are not MVP client features yet.
 
-[Features](#features) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Architecture](#architecture)
+## Current MVP Surface
 
-</div>
+- Provider setup with masked API keys and health checks.
+- Target, scope, config, review and preflight flow.
+- Durable live scan timeline backed by `PentestEvent`.
+- Stop control for active runs.
+- Run projection panel for status, phase, tool activity, findings and errors.
+- Findings review with draft, validated and rejected states.
+- Report exports: JSON, HTML and PDF.
+- Reports navigation in the main sidebar.
 
----
+## Experimental Or Internal
 
-## Overview
+These surfaces are hidden by default or intended for admin/dev usage only:
 
-LEA Platform is an enterprise-grade, AI-powered penetration testing automation platform that combines:
+- Runtime extensions console.
+- Hooks, plugins, skills and LSP.
+- Raw MCP browser and ToolRegistry explorer.
+- Manual Tool Invoke UI.
+- Swarm traces and advanced runtime control.
+- Worktrees, plan mode and checkpoints.
+- Remote sessions, IDE bridge, voice and marketplace.
 
-- **🤖 Multi-Provider AI Orchestration** - Anthropic Claude, Zhipu AI, OpenAI
-- **🔧 Real MCP Kali Integration** - Direct integration with Kali Linux tools via MCP protocol
-- **✅ Authentic Preflight Checks** - Real security assessments, not synthetic data
-- **🗄️ PostgreSQL Database** - Persistent storage with Docker deployment
-- **🐳 Containerized Architecture** - Easy deployment with Docker Compose
-- **📊 Comprehensive Reporting** - PDF, Excel, JSON exports with customizable templates
+Use the frontend flags below only for local/admin exploration:
 
----
-
-## Features
-
-### 🎯 Core Capabilities
-
-- **Automated Pentest Execution**: Full pentest lifecycle from recon to reporting
-- **Real Preflight Checks**: DNS, HTTP, port scanning, WAF detection, security headers
-- **MCP Tool Integration**: 20+ Kali Linux tools via MCP protocol
-- **Provider Selection**: Choose the best AI provider or let the system auto-select
-- **Real-time Updates**: SSE streaming for live progress updates
-- **Findings Management**: Comprehensive vulnerability tracking with CVSS scoring
-- **Report Generation**: Professional pentest reports in multiple formats
-
-### 🔒 Security Tools (via MCP Kali)
-
-**Reconnaissance:**
-- Nmap port scanning
-- DNS enumeration
-- Subdomain discovery
-- WHOIS lookups
-- Shodan/Censys integration
-
-**Vulnerability Scanning:**
-- Nikto web scanning
-- Nuclei template-based scanning
-- SQLMap SQL injection
-- Nessus/OpenVAS integration
-
-**Web Analysis:**
-- Wappalyzer tech detection
-- Security headers analysis
-- WAF detection
-- Directory bruteforcing
-- Fuzzing with FFUF
-
-### 🤖 AI Provider Support
-
-- **Anthropic Claude** (Sonnet 4.5, Opus 4.5, Haiku)
-- **Zhipu AI** (GLM-4, GLM-4 Plus)
-- **OpenAI** (GPT-4, GPT-4 Turbo)
-- **Custom Providers** (OpenAI-compatible APIs)
-
----
+```env
+NEXT_PUBLIC_LEA_EXPERIMENTAL_UI=false
+NEXT_PUBLIC_LEA_EXPERIMENTAL_RUNTIME_UI=false
+NEXT_PUBLIC_LEA_ADVANCED_SCAN_CONTROLS=false
+```
 
 ## Quick Start
 
-### Prerequisites
+Prerequisites:
 
-- Docker Desktop (4GB+ RAM)
-- Git
-- Code editor (VS Code recommended)
+- Docker Desktop.
+- Node.js matching the project lockfiles.
+- Git.
 
-### Installation
+Start the local stack:
 
 ```bash
-# 1. Navigate to project
-cd ~/Documents/LEA
+docker compose --profile dev up -d postgres postgres-dev-port lea-kali-mcp
+```
 
-# 2. Start services
-docker-compose up -d
+Install and run the backend:
 
-# 3. Initialize database
-docker-compose exec backend npx prisma migrate deploy
+```bash
+cd backend
+npm install
+npm run build
+npm run dev
+```
 
-# 4. Access platform
+Install and run the frontend:
+
+```bash
+cd lea-app
+npm install
+npm run dev
+```
+
+Open the app:
+
+```bash
 open http://localhost:3000
 ```
 
-**That's it!** The platform is now running.
+## Environment
 
-### Initial Configuration
+The shared `.env.example` documents local defaults and production-sensitive switches.
 
-1. **Configure AI Providers**
-   - Navigate to http://localhost:3000
-   - Go to Configuration > Providers
-   - Add your API keys
+Important variables:
 
-2. **Connect MCP Kali Server**
-   - Edit `backend/.env`
-   - Set `MCP_KALI_ENDPOINT=http://your-mcp-server:3000`
-   - Restart: `docker-compose restart backend`
-
-3. **Run Your First Pentest**
-   - Enter target domain/IP
-   - Click "Run Preflight"
-   - Start pentest execution
-
----
-
-## Documentation
-
-### Setup & Installation
-
-- **[COMPLETE_QUICKSTART.md](./COMPLETE_QUICKSTART.md)** - Complete installation guide
-- **[BACKEND_DOCKER_SETUP.md](./BACKEND_DOCKER_SETUP.md)** - Docker setup details
-- **[MCP_INTEGRATION_GUIDE.md](./MCP_INTEGRATION_GUIDE.md)** - MCP Kali integration
-
-### Features & Configuration
-
-- **[PROVIDERS_QUICKSTART.md](./PROVIDERS_QUICKSTART.md)** - AI provider setup
-- **[PROVIDERS_IMPLEMENTATION_SUMMARY.md](./PROVIDERS_IMPLEMENTATION_SUMMARY.md)** - Provider architecture
-- **[QUICKSTART_REPORTS.md](./QUICKSTART_REPORTS.md)** - Report generation
-- **[REPORT_IMPLEMENTATION.md](./REPORT_IMPLEMENTATION.md)** - Report system details
-
-### Scripts & Automation
-
-- **[SCRIPTS_README.md](./SCRIPTS_README.md)** - Utility scripts
-
----
-
-## Architecture
-
-### System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        LEA Platform                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
-│  │   Frontend   │    │   Backend    │    │ PostgreSQL   │ │
-│  │   (React)    │◀──▶│  (Fastify)   │◀──▶│  Database    │ │
-│  │   :3000      │    │    :3001     │    │    :5432     │ │
-│  └──────────────┘    └──────┬───────┘    └──────────────┘ │
-│                             │                                │
-│                             ▼                                │
-│                      ┌──────────────┐                        │
-│                      │   MCP Kali   │                        │
-│                      │   Server     │                        │
-│                      │   :3000      │                        │
-│                      └──────────────┘                        │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+```env
+DATABASE_URL=postgresql://lea_admin:CHANGE_THIS_PASSWORD_IN_PRODUCTION@postgres:5432/lea_platform
+LEA_REQUIRE_API_KEY=false
+LEA_API_KEY=
+NEXT_PUBLIC_LEA_DEV_API_KEY=
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+MCP_KALI_ENDPOINT=http://lea-kali-mcp:3002/mcp
+LEA_ENABLE_TOOL_INVOKE_API=false
 ```
 
-### Components
-
-**Frontend (`lea-ui/`)**
-- React 19 + TypeScript
-- Tailwind CSS + shadcn/ui
-- Real-time SSE streaming
-- Pentest management UI
-
-**Backend (`backend/`)**
-- Fastify + TypeScript
-- Prisma ORM
-- MCP client service
-- Provider orchestration
-
-**Database**
-- PostgreSQL 16
-- Prisma schema management
-- Automated migrations
-- Full-text search
-
-**MCP Integration**
-- Kali Linux tools
-- Custom MCP server support
-- Tool result parsing
-- Finding extraction
-
----
+For production or SaaS-like deployments, global auth, strict CORS, scope enforcement and admin-only runtime APIs must remain enabled and verified.
 
 ## Project Structure
 
-```
+```txt
 LEA/
-├── backend/                    # Backend API
-│   ├── src/
-│   │   ├── routes/            # API routes
-│   │   ├── services/          # Business logic
-│   │   │   ├── mcp/          # MCP client
-│   │   │   ├── PreflightService.ts
-│   │   │   ├── PentestOrchestrator.ts
-│   │   │   ├── ProviderManager.ts
-│   │   │   └── ReportService.ts
-│   │   └── types/            # TypeScript types
-│   ├── prisma/               # Database schema
-│   ├── Dockerfile
-│   └── package.json
-│
-├── lea-ui/                    # Frontend UI
-│   ├── src/
-│   │   ├── components/       # React components
-│   │   ├── pages/            # Page components
-│   │   ├── store/            # State management
-│   │   └── lib/              # Utilities
-│   ├── Dockerfile
-│   └── package.json
-│
-├── docker/                    # Docker configs
-│   └── postgres/
-│       └── init/             # DB initialization
-│
-├── docker-compose.yml         # Service orchestration
-├── COMPLETE_QUICKSTART.md
-├── BACKEND_DOCKER_SETUP.md
-├── MCP_INTEGRATION_GUIDE.md
-└── README.md
+├── backend/                  # Fastify API, Prisma, runtime services
+│   ├── src/routes/           # REST and SSE routes
+│   ├── src/services/         # Pentest, providers, reports, export, runtime
+│   └── prisma/schema.prisma  # PentestEvent, Message, ToolExecution, Finding
+├── lea-app/                  # Next.js App Router frontend
+│   ├── app/                  # Routes
+│   ├── components/           # UI components
+│   ├── hooks/                # Client data hooks
+│   ├── store/                # UI cache stores
+│   └── lib/                  # API clients and helpers
+├── docs/                     # Additional documentation
+├── docker-compose.yml
+├── ROADMAP-ACTIVE.md
+├── IMPLEMENTATION-LOGIQUE-CLAUDE.md
+└── IMPLEMENTATION-UI-CLAUDE.md
 ```
 
----
+## Architecture Rules For The RC
 
-## Key Features Deep Dive
+- `PentestEvent` is the durable temporal source of truth.
+- `Message` is a conversation projection, not the only source of truth.
+- `ToolExecution` and `KaliAuditLog` hold tool and audit evidence.
+- `Finding` is the reviewable client value object.
+- `PentestRunProjection` is the UI state contract.
+- `SSEManager` is a transport/cache, not the product truth.
+- Frontend stores are UI caches only.
 
-### 🚀 Real Preflight Checks
+## Key API Surfaces
 
-Unlike synthetic preflight systems, LEA Platform performs **actual security assessments**:
+Pentests:
 
-```typescript
-// Checks performed:
-✓ DNS Resolution           - Real DNS queries
-✓ HTTP/HTTPS Reachability  - Actual HTTP requests
-✓ MCP Server Connectivity  - MCP protocol handshake
-✓ Tool Availability        - Tool presence verification
-✓ Open Ports Scan          - Nmap port scanning
-✓ WAF Detection            - WAF header analysis
-✓ Technology Stack         - Wappalyzer integration
-✓ Security Headers         - Header security scoring
-```
-
-### 🤖 Multi-Provider AI Orchestration
-
-Supports multiple AI providers with automatic failover:
-
-```typescript
-// Provider selection strategies:
-- Manual Selection           - User chooses provider
-- Auto-Selection            - System selects best available
-- Priority-based            - Fallback chain
-- Load-balancing            - Distribute across providers
-```
-
-### 🔧 MCP Kali Linux Integration
-
-Direct integration with Kali tools via MCP protocol:
-
-```typescript
-// Tool execution flow:
-1. AI Agent selects tool
-2. Backend calls MCP service
-3. MCP executes tool on Kali
-4. Results returned to backend
-5. Findings parsed & stored
-6. AI analyzes results
-7. Next phase initiated
-```
-
-### 📊 Comprehensive Reporting
-
-Professional pentest reports with:
-
-- Executive summary
-- Detailed findings with CVSS scores
-- Timeline and metrics
-- Tool execution logs
-- Remediation recommendations
-- Multiple export formats (PDF, Excel, JSON)
-
----
-
-## Environment Configuration
-
-### Backend (.env)
-
-```bash
-# Database
-DATABASE_URL=postgresql://lea_admin:password@localhost:5432/lea_platform
-
-# MCP Configuration
-MCP_KALI_ENDPOINT=http://localhost:3000
-MCP_TIMEOUT=30000
-
-# Default Provider
-DEFAULT_PROVIDER=anthropic
-DEFAULT_MODEL=claude-sonnet-4-5-20250929
-
-# Encryption
-ENCRYPTION_KEY=your-base64-encoded-key
-
-# Server
-PORT=3001
-HOST=0.0.0.0
-NODE_ENV=development
-LOG_LEVEL=debug
-```
-
-### Frontend (.env)
-
-```bash
-VITE_API_URL=http://localhost:3001
-VITE_WS_URL=ws://localhost:3001
-```
-
----
-
-## Development Workflow
-
-### Starting Development Environment
-
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Restart specific service
-docker-compose restart backend
-
-# Enter container
-docker-compose exec backend sh
-```
-
-### Database Management
-
-```bash
-# Run migrations
-docker-compose exec backend npx prisma migrate deploy
-
-# Open Prisma Studio
-docker-compose exec backend npx prisma studio
-
-# Reset database (WARNING: deletes data)
-docker-compose exec backend npx prisma migrate reset
-```
-
-### Building for Production
-
-```bash
-# Build production images
-docker-compose -f docker-compose.yml build
-
-# Start production
-docker-compose up -d
-
-# Check health
-curl http://localhost:3001/health
-```
-
----
-
-## API Endpoints
-
-### Pentest Management
-
-```bash
-# Create pentest
+```http
+GET  /api/pentests
 POST /api/pentests
-Body: { target: "example.com", scope: ["*.example.com"] }
-
-# Get pentest status
-GET /api/pentests/:id
-
-# Start pentest
-POST /api/pentests/:id/start
-
-# Pause/Resume
-POST /api/pentests/:id/pause
-POST /api/pentests/:id/resume
-
-# Cancel
-DELETE /api/pentests/:id
-```
-
-### Preflight Checks
-
-```bash
-# Run preflight
 POST /api/pentests/:id/preflight
-Body: { target: "example.com" }
-
-# Get preflight results
-GET /api/pentests/:id/preflight
+POST /api/pentests/:id/preflight/retry
+POST /api/pentests/:id/start
+POST /api/pentests/:id/stop
+GET  /api/pentests/:id/events?sinceSeq=123
+GET  /api/pentests/:id/projection
+GET  /api/pentests/:id/stream
 ```
 
-### Providers
+Reports:
 
-```bash
-# List providers
-GET /api/providers
-
-# Add provider
-POST /api/providers
-Body: { name: "anthropic", apiKey: "sk-ant-xxx" }
-
-# Test provider
-POST /api/providers/:id/test
-
-# Set default
-PUT /api/providers/:id/default
-```
-
-### Reports
-
-```bash
-# List reports
+```http
 GET /api/reports
-
-# Get report
 GET /api/reports/:id
-
-# Export report
-POST /api/reports/:id/export
-Body: { format: "pdf" }
+PUT /api/reports/:id/findings/:findingId
+GET /api/reports/:id/export/json
+GET /api/reports/:id/export/html
+GET /api/reports/:id/export/pdf
 ```
 
----
+Providers:
 
-## Troubleshooting
-
-### Common Issues
-
-**PostgreSQL connection failed**
-```bash
-# Check PostgreSQL is running
-docker-compose ps postgres
-
-# Restart PostgreSQL
-docker-compose restart postgres
-
-# Check logs
-docker-compose logs postgres
+```http
+GET  /api/providers
+POST /api/providers
+PUT  /api/providers/:id
+POST /api/providers/:id/test
 ```
 
-**Backend API not responding**
-```bash
-# Check logs
-docker-compose logs backend
+Tool Invoke:
 
-# Restart backend
-docker-compose restart backend
-
-# Verify environment
-docker-compose exec backend env | grep DATABASE_URL
+```http
+POST /api/tools/:name/invoke
 ```
 
-**MCP connection failed**
-```bash
-# Test MCP endpoint
-curl http://localhost:3000/health
+Tool Invoke is internal/admin/dev only, disabled by default with `LEA_ENABLE_TOOL_INVOKE_API=false`, and must not be exposed as a client MVP feature.
 
-# Check backend logs
-docker-compose logs backend | grep -i mcp
+## Verification
 
-# Verify configuration
-docker-compose exec backend cat .env | grep MCP
-```
-
-### Reset Everything
+Recommended RC checks:
 
 ```bash
-# Stop all services
-docker-compose down
-
-# Remove volumes (WARNING: deletes data)
-docker-compose down -v
-
-# Rebuild and start
-docker-compose up -d --build
-
-# Reinitialize database
-docker-compose exec backend npx prisma migrate deploy
+cd backend && npm run build
+cd backend && npx vitest run
+cd lea-app && npm run lint -- --quiet
+cd lea-app && npm run typecheck
+cd lea-app && npx vitest run
 ```
 
----
+Browser smoke to run before a release candidate:
 
-## Security Best Practices
-
-1. **Change Default Passwords**
-   ```bash
-   # Generate secure password
-   openssl rand -base64 24
-   ```
-
-2. **Generate Secure Encryption Key**
-   ```bash
-   openssl rand -base64 32
-   ```
-
-3. **Enable CORS Protection**
-   ```bash
-   CORS_ORIGIN=https://your-domain.com
-   ```
-
-4. **Set Up Firewall Rules**
-   ```bash
-   # Only expose necessary ports
-   # 3000: Frontend (public)
-   # 3001: Backend (internal)
-   # 5432: PostgreSQL (internal only)
-   ```
-
-5. **Regular Backups**
-   ```bash
-   # Automated backup script
-   ./scripts/backup-db.sh
-   ```
-
----
-
-## Performance Tuning
-
-### PostgreSQL
-
-```yaml
-# docker-compose.yml
-postgres:
-  command: >
-    postgres
-    -c shared_buffers=256MB
-    -c effective_cache_size=1GB
-    -c max_connections=200
-```
-
-### Backend
-
-```yaml
-backend:
-  environment:
-    NODE_OPTIONS: "--max-old-space-size=2048"
-    MAX_CONCURRENT_PENTESTS: "5"
-    TOOL_EXECUTION_TIMEOUT: "120000"
-```
-
----
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
----
-
-## License
-
-MIT License - See LICENSE file for details
-
----
+1. Configure provider.
+2. Create target and scope.
+3. Select model and effort.
+4. Run preflight.
+5. Start scan.
+6. Observe live events.
+7. Reload during scan and confirm replay.
+8. Stop scan.
+9. Review and validate findings.
+10. Export JSON, HTML and PDF.
+11. Resume the completed session from recent scans or reports.
 
 ## Roadmap
 
-### v1.1 (Upcoming)
-- [ ] Additional MCP tools
-- [ ] Custom tool templates
-- [ ] Advanced scheduling
-- [ ] Team collaboration features
+The active execution plan lives in:
 
-### v1.2 (Planned)
-- [ ] Multi-tenant support
-- [ ] API authentication
-- [ ] Advanced analytics
-- [ ] CI/CD integration
+- `ROADMAP-ACTIVE.md`
+- `IMPLEMENTATION-LOGIQUE-CLAUDE.md`
+- `IMPLEMENTATION-UI-CLAUDE.md`
 
-### v2.0 (Future)
-- [ ] Distributed execution
-- [ ] Cloud deployment
-- [ ] Mobile app
-- [ ] Plugin system
-
----
-
-## Support
-
-For issues and questions:
-
-1. Check documentation in `/doc`
-2. Review troubleshooting sections
-3. Check logs: `docker-compose logs -f`
-4. Review GitHub issues
-
----
-
-## Acknowledgments
-
-- **Anthropic** - Claude AI models
-- **Zhipu AI** - GLM models
-- **MCP Protocol** - Model Context Protocol
-- **Kali Linux** - Penetration testing tools
-- **Prisma** - Database ORM
-- **Fastify** - Web framework
-
----
-
-<div align="center">
-
-**Built with ❤️ for the security community**
-
-[⬆ Back to Top](#lea-platform---ai-powered-pentest-automation)
-
-</div>
+Those documents distinguish MVP, RC stabilization, experimental runtime features and post-MVP backlog.

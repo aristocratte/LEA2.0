@@ -34,6 +34,10 @@ export class LiveSwarmRuntime implements SwarmRuntime {
     return this.swarm.resume(pentestId);
   }
 
+  stop(pentestId: string): Promise<Swarm> {
+    return this.swarm.stop(pentestId);
+  }
+
   forceMerge(pentestId: string): Promise<Swarm> {
     return this.swarm.forceMerge(pentestId);
   }

@@ -64,6 +64,13 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
   const allowMcpPermissions = createDefaultContext({
     allowRules: { session: ['mcp:nmap_scan', 'mcp:whois_lookup'] },
   });
+  const mcpRuntimeContext = {
+    target: '10.0.0.1',
+    inScope: ['10.0.0.1', 'example.com'],
+    outOfScope: [],
+    scopeMode: 'extended' as const,
+    allowPrivateTargets: true,
+  };
 
   beforeEach(() => {
     registry = new ToolRegistry();
@@ -91,6 +98,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-mcp-e2e',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       // Assert
@@ -123,6 +131,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-mcp-e2e',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       // MCP errors are delivered as result text (not thrown), so isError may not be set
@@ -141,6 +150,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-mcp-e2e',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       expect(result.event.isError).toBe(true);
@@ -166,6 +176,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-mcp-e2e',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       expect(result.event.isError).toBe(true);
@@ -185,6 +196,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-mcp-e2e',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       expect(result.event.isError).toBeUndefined();
@@ -223,6 +235,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-coexist',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
       expect(localResult.event.result).toBe('local: hello');
 
@@ -234,6 +247,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-coexist',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
       expect(mcpResult.event.result).toBe('mcp result here');
 
@@ -297,6 +311,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-hooks',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       expect(preEvents).toHaveLength(1);
@@ -331,6 +346,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-fail-hook',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       // MCP errors return normally (not thrown), so tool-failure hook should NOT fire
@@ -345,6 +361,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-fail-hook',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
       expect(result.event.result).toContain('[MCP Error]');
       expect(result.event.result).toContain('Connection refused');
@@ -371,6 +388,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-schema',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       // Should NOT get a validation error — passthrough accepts extra fields
@@ -398,6 +416,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-alias',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       // ToolRegistry.get() resolves aliases, so this should work
@@ -426,6 +445,7 @@ describe('C6 — MCP Tool Execution via ToolExecutor (E2E)', () => {
         sessionId: 'sess-trunc',
         abortController: new AbortController(),
         permissions: allowMcpPermissions,
+        runtimeContext: mcpRuntimeContext,
       });
 
       expect(result.event.isError).toBeUndefined();

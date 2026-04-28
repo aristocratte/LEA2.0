@@ -451,6 +451,64 @@ export interface ApiKaliAuditLog {
   created_at: string;
 }
 
+export interface ApiPentestProjectionScopeSummary {
+  inScope: string[];
+  outOfScope: string[];
+}
+
+export interface ApiPentestProjectionActivity {
+  label: string;
+  toolName?: string;
+  startedAt?: string;
+}
+
+export interface ApiPentestProjectionCounters {
+  events: number;
+  messages: number;
+  toolCalls: number;
+  findingsDraft: number;
+  findingsValidated: number;
+  errors: number;
+}
+
+export interface ApiPentestProjectionToolCall {
+  id: string;
+  toolName: string;
+  status: ApiToolExecution['status'] | string;
+  startedAt?: string;
+  endedAt?: string;
+  durationMs?: number;
+  error?: string;
+}
+
+export interface ApiPentestProjectionError {
+  message: string;
+  severity: 'warning' | 'error';
+  createdAt?: string;
+}
+
+export interface ApiPentestRunProjection {
+  pentestId: string;
+  runId?: string;
+  status: PentestStatus | string;
+  phase: ApiPentestPhase | string;
+  target: string;
+  scopeSummary: ApiPentestProjectionScopeSummary;
+  currentActivity?: ApiPentestProjectionActivity;
+  counters: ApiPentestProjectionCounters;
+  recentToolCalls: ApiPentestProjectionToolCall[];
+  recentErrors: ApiPentestProjectionError[];
+  findingsSummary: {
+    total: number;
+    draft: number;
+    validated: number;
+  };
+  lastSeq: number;
+  recentEvents: SwarmEventEnvelope<SwarmEventPayload>[];
+  recentFindings: ApiFinding[];
+  todos: ApiTodo[];
+}
+
 export type ContextCompactionTrigger = 'PHASE_END' | 'URGENT' | 'ERROR_RECOVERY' | 'MANUAL';
 
 export interface ContextSnapshot {
@@ -484,6 +542,7 @@ export type {
   SwarmRunStatus,
   SwarmAgentStatus,
   SwarmSeverity,
+  FindingReviewState,
   SwarmStreamEventType,
   SwarmStreamEventMap,
   SwarmStreamMessage,

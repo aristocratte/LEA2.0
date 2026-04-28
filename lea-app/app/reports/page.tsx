@@ -61,6 +61,7 @@ type FindingUpdatePayload = {
   cvss_score?: number | null;
   endpoint?: string | null;
   target_host?: string | null;
+  status?: ApiFinding['status'];
 };
 
 const API_TO_SWARM_SEVERITY: Record<ApiSeverity, SwarmSeverity> = {
@@ -86,6 +87,63 @@ const SEVERITY_LABELS: Record<ApiSeverity, string> = {
   LOW: 'Low',
   INFORMATIONAL: 'Info',
 };
+
+type FindingReviewState = NonNullable<SwarmFinding['reviewState']>;
+
+function getFindingReviewState(finding: ApiFinding): FindingReviewState {
+  if (
+    finding.verification_state === 'REJECTED'
+    || finding.false_positive
+    || finding.status === 'FALSE_POSITIVE'
+  ) {
+    return 'rejected';
+  }
+
+  if (
+    finding.verification_state === 'CONFIRMED'
+    || finding.verified
+    || finding.status === 'CONFIRMED'
+  ) {
+    return 'validated';
+  }
+
+  return 'draft';
+}
+
+function hasFindingEvidence(finding: ApiFinding): boolean {
+  return Boolean(finding.evidence?.trim());
+}
+
+function getFindingStatusForReviewState(state: FindingReviewState): ApiFinding['status'] {
+  if (state === 'validated') return 'CONFIRMED';
+  if (state === 'rejected') return 'FALSE_POSITIVE';
+  return 'OPEN';
+}
+
+function summarizeFindingReadiness(findings: ApiFinding[] = []) {
+  const summary = {
+    total: findings.length,
+    validated: 0,
+    draft: 0,
+    rejected: 0,
+    evidenceMissing: 0,
+    evidencePresent: 0,
+  };
+
+  for (const finding of findings) {
+    const reviewState = getFindingReviewState(finding);
+    summary[reviewState] += 1;
+    if (hasFindingEvidence(finding)) summary.evidencePresent += 1;
+    else summary.evidenceMissing += 1;
+  }
+
+  return {
+    ...summary,
+    clientReady: summary.total > 0
+      && summary.validated === summary.total
+      && summary.evidenceMissing === 0,
+  };
+}
 
 function normalizeSeverity(value: string | null | undefined): ApiSeverity | null {
   const normalized = String(value || '').toUpperCase();
@@ -198,6 +256,8 @@ function findingToSwarmFinding(finding: ApiFinding, reportId: string): SwarmFind
       : undefined,
   ].filter((item): item is string => Boolean(item));
 
+  const reviewState = getFindingReviewState(finding);
+
   return {
     id: finding.id,
     pentestId: finding.pentest_id,
@@ -210,6 +270,14 @@ function findingToSwarmFinding(finding: ApiFinding, reportId: string): SwarmFind
     proof: finding.evidence || undefined,
     remediation: finding.remediation || undefined,
     affected_components: affectedComponents,
+    reviewState,
+    evidenceScore: finding.evidence_score,
+    verificationState: finding.verification_state,
+    reasonCodes: finding.reason_codes,
+    status: finding.status,
+    verified: finding.verified,
+    falsePositive: finding.false_positive,
+    hasEvidence: hasFindingEvidence(finding),
     pushed: Boolean(finding.report_id),
     createdAt: finding.created_at || finding.discovered_at,
     updatedAt: finding.updated_at,
@@ -232,6 +300,7 @@ function buildFindingUpdatePayload(finding: SwarmFinding): FindingUpdatePayload 
       : null,
     endpoint: endpoint || null,
     target_host: targetHost || null,
+    status: getFindingStatusForReviewState(finding.reviewState ?? 'draft'),
   };
 }
 
@@ -338,10 +407,14 @@ function ExportButton({
   format,
   onClick,
   compact = false,
+  disabled = false,
+  reason,
 }: {
   format: ExportFormat;
   onClick: () => void;
   compact?: boolean;
+  disabled?: boolean;
+  reason?: string;
 }) {
   const meta = {
     json: { label: 'JSON', icon: FileJson },
@@ -354,9 +427,11 @@ function ExportButton({
     <button
       type="button"
       onClick={onClick}
-      title={`Export ${meta.label}`}
+      disabled={disabled}
+      title={disabled ? reason || `Export ${meta.label} unavailable` : `Export ${meta.label}`}
       className={cn(
         'inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 text-[12px] font-medium text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900',
+        disabled && 'cursor-not-allowed opacity-45 hover:border-zinc-200 hover:bg-transparent hover:text-zinc-600',
         compact ? 'h-8 w-8 px-0' : 'px-2.5 py-1.5',
       )}
     >
@@ -453,6 +528,13 @@ export default function ReportsPage() {
       findingToSwarmFinding(finding, selectedReport.id),
     );
   }, [selectedReport]);
+  const readiness = useMemo(
+    () => summarizeFindingReadiness(selectedReport?.findings ?? []),
+    [selectedReport?.findings],
+  );
+  const exportDisabledReason = readiness.total === 0
+    ? 'Validate at least one evidence-backed finding before exporting.'
+    : 'Exports unlock after every finding is validated and has evidence.';
 
   const handleExport = async (report: ReportItem | ReportDetail, format: ExportFormat) => {
     try {
@@ -752,15 +834,67 @@ export default function ReportsPage() {
                         <ExportButton
                           format="json"
                           onClick={() => void handleExport(selectedReport, 'json')}
+                          disabled={!readiness.clientReady}
+                          reason={exportDisabledReason}
                         />
                         <ExportButton
                           format="html"
                           onClick={() => void handleExport(selectedReport, 'html')}
+                          disabled={!readiness.clientReady}
+                          reason={exportDisabledReason}
                         />
                         <ExportButton
                           format="pdf"
                           onClick={() => void handleExport(selectedReport, 'pdf')}
+                          disabled={!readiness.clientReady}
+                          reason={exportDisabledReason}
                         />
+                      </div>
+                    </div>
+
+                    <div
+                      className={cn(
+                        'mb-5 rounded-xl border p-4',
+                        readiness.clientReady
+                          ? 'border-green-200 bg-green-50'
+                          : 'border-amber-200 bg-amber-50',
+                      )}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p
+                            className={cn(
+                              'text-sm font-semibold',
+                              readiness.clientReady ? 'text-green-800' : 'text-amber-900',
+                            )}
+                          >
+                            {readiness.clientReady ? 'Client-ready report' : 'Needs review before export'}
+                          </p>
+                          <p
+                            className={cn(
+                              'mt-1 text-xs leading-5',
+                              readiness.clientReady ? 'text-green-700' : 'text-amber-800',
+                            )}
+                          >
+                            {readiness.clientReady
+                              ? 'All findings are validated and include concrete evidence.'
+                              : 'Validate every finding and add evidence before producing client deliverables.'}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-[11px] font-medium">
+                          <span className="rounded-full border border-green-200 bg-white px-2 py-1 text-green-700">
+                            {readiness.validated} validated
+                          </span>
+                          <span className="rounded-full border border-amber-200 bg-white px-2 py-1 text-amber-700">
+                            {readiness.draft} draft
+                          </span>
+                          <span className="rounded-full border border-red-200 bg-white px-2 py-1 text-red-700">
+                            {readiness.rejected} rejected
+                          </span>
+                          <span className="rounded-full border border-zinc-200 bg-white px-2 py-1 text-zinc-600">
+                            {readiness.evidenceMissing} missing evidence
+                          </span>
+                        </div>
                       </div>
                     </div>
 

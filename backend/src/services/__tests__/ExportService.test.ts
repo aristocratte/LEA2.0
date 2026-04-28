@@ -72,4 +72,58 @@ describe('ExportService', () => {
     expect(pdf.subarray(0, 4).toString('utf8')).toBe('%PDF');
     expect(pdf.length).toBeGreaterThan(1000);
   });
+
+  it('exports finding evidence, review state, and recalculated statistics in JSON', () => {
+    const service = new ExportService();
+
+    const json = service.generateJson(buildReportWithMultilineContent()) as {
+      statistics: {
+        total: number;
+        review: { validated: number; draft: number; rejected: number };
+        evidence: { present: number; missing: number };
+      };
+      findings: Array<{
+        review: {
+          state: string;
+          verificationState: string;
+          evidenceScore: number;
+          reasonCodes: string[];
+        };
+        location: { display: string };
+        source: { toolUsed: string | null };
+        evidence: string | null;
+        hasEvidence: boolean;
+      }>;
+    };
+
+    expect(json.statistics).toMatchObject({
+      total: 1,
+      review: { validated: 1, draft: 0, rejected: 0 },
+      evidence: { present: 1, missing: 0 },
+    });
+    expect(json.findings[0]).toMatchObject({
+      review: {
+        state: 'validated',
+        verificationState: 'CONFIRMED',
+        evidenceScore: 80,
+        reasonCodes: [],
+      },
+      location: { display: 'app.example.com / https/443' },
+      evidence: 'GET /\nHTTP/1.1 200 OK',
+      hasEvidence: true,
+    });
+  });
+
+  it('includes evidence and review metadata in HTML exports', async () => {
+    const service = new ExportService();
+
+    const html = await service.generateHtml(buildReportWithMultilineContent());
+
+    expect(html).toContain('Validated');
+    expect(html).toContain('Evidence present');
+    expect(html).toContain('Score 80');
+    expect(html).toContain('GET /');
+    expect(html).toContain('app.example.com / https/443');
+    expect(html).toContain('Informational');
+  });
 });

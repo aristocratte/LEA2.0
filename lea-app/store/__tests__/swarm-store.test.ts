@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
   let connectOptions: {
     onOpen?: () => void;
     onEvent: (eventType: string, event: MessageEvent<string>) => void;
+    headers?: HeadersInit;
   } | null = null;
   return {
     get connectOptions() {
@@ -13,12 +14,14 @@ const mocks = vi.hoisted(() => {
     connectMock: vi.fn((options: {
       onOpen?: () => void;
       onEvent: (eventType: string, event: MessageEvent<string>) => void;
+      headers?: HeadersInit;
     }) => {
       connectOptions = options;
       options.onOpen?.();
       return { close: vi.fn() };
     }),
     getSwarmStateMock: vi.fn(),
+    getDevelopmentApiKeyMock: vi.fn(),
     toastErrorMock: vi.fn(),
   };
 });
@@ -31,6 +34,7 @@ vi.mock('@/lib/runtime/runtime-client', () => ({
 
 vi.mock('@/lib/api', () => ({
   getSwarmStreamUrl: (pentestId: string) => `/stream/${pentestId}`,
+  getDevelopmentApiKey: mocks.getDevelopmentApiKeyMock,
   pentestsApi: {
     getSwarmState: mocks.getSwarmStateMock,
   },
@@ -61,7 +65,19 @@ describe('useSwarmStore legacy pentest events', () => {
     mocks.connectMock.mockClear();
     mocks.getSwarmStateMock.mockReset();
     mocks.getSwarmStateMock.mockResolvedValue({ data: null });
+    mocks.getDevelopmentApiKeyMock.mockReset();
+    mocks.getDevelopmentApiKeyMock.mockReturnValue(undefined);
     mocks.toastErrorMock.mockClear();
+  });
+
+  it('passes dev authorization headers to the runtime stream client', () => {
+    mocks.getDevelopmentApiKeyMock.mockReturnValue('dev-stream-key');
+
+    useSwarmStore.getState().connect('pentest-1');
+
+    expect(mocks.connectMock).toHaveBeenCalledWith(expect.objectContaining({
+      headers: { Authorization: 'Bearer dev-stream-key' },
+    }));
   });
 
   it('surfaces legacy runtime errors as a failed run and visible feed message', () => {
@@ -80,6 +96,16 @@ describe('useSwarmStore legacy pentest events', () => {
     expect(state.feedMessages[0].content).toContain('Runtime failed');
     expect(state.feedMessages[0].content).toContain('Zhipu API error 500');
     expect(mocks.toastErrorMock).toHaveBeenCalledWith('Pentest failed: Zhipu API error 500: Operation failed');
+  });
+
+  it('maps cancelled status changes to a terminal cancelled run', () => {
+    useSwarmStore.getState().connect('pentest-1');
+
+    emit('status_change', { status: 'CANCELLED' });
+
+    const state = useSwarmStore.getState();
+    expect(state.run?.status).toBe('CANCELLED');
+    expect(state.run?.endedAt).toBeTruthy();
   });
 
   it('coalesces legacy assistant message deltas into one feed message', () => {

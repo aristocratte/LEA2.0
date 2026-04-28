@@ -231,6 +231,70 @@ export interface KaliAuditLog {
 }
 
 // ============================================
+// PENTEST RUN PROJECTION
+// ============================================
+
+export interface PentestRunProjectionScopeSummary {
+  inScope: string[];
+  outOfScope: string[];
+}
+
+export interface PentestRunProjectionActivity {
+  label: string;
+  toolName?: string;
+  startedAt?: string;
+}
+
+export interface PentestRunProjectionCounters {
+  events: number;
+  messages: number;
+  toolCalls: number;
+  findingsDraft: number;
+  findingsValidated: number;
+  errors: number;
+}
+
+export interface PentestRunProjectionToolCall {
+  id: string;
+  toolName: string;
+  status: ToolStatus | string;
+  startedAt?: string;
+  endedAt?: string;
+  durationMs?: number;
+  error?: string;
+}
+
+export interface PentestRunProjectionError {
+  message: string;
+  severity: 'warning' | 'error';
+  createdAt?: string;
+}
+
+export interface PentestRunProjectionFindingSummary {
+  total: number;
+  draft: number;
+  validated: number;
+}
+
+export interface PentestRunProjection {
+  pentestId: string;
+  runId?: string;
+  status: PentestStatus | string;
+  phase: PentestPhase | string;
+  target: string;
+  scopeSummary: PentestRunProjectionScopeSummary;
+  currentActivity?: PentestRunProjectionActivity;
+  counters: PentestRunProjectionCounters;
+  recentToolCalls: PentestRunProjectionToolCall[];
+  recentErrors: PentestRunProjectionError[];
+  findingsSummary: PentestRunProjectionFindingSummary;
+  lastSeq: number;
+  recentEvents: unknown[];
+  recentFindings: Finding[];
+  todos: Todo[];
+}
+
+// ============================================
 // SSE EVENTS
 // ============================================
 

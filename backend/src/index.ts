@@ -79,6 +79,8 @@ import { LspAnalysisService, createLspDiagnosticsTool, createLspSymbolsTool } fr
 import { lspRoutes } from './routes/lsp.js';
 import { hookRoutes } from './routes/hooks.js';
 import { mcpRoutes } from './routes/mcp.js';
+import { createPersistentPentestEventStore } from './services/PentestEventService.js';
+import { isCorsOriginAllowed } from './services/SecurityPolicy.js';
 
 const sslConfig = loadSSLConfig();
 
@@ -91,29 +93,12 @@ const fastify = Fastify({
 fastify.decorate('providerManager', providerManager);
 
 // Register plugins
-const parseCsvEnv = (value: string | undefined, fallback: string[]): string[] => {
-  const parsed = value
-    ?.split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  return parsed && parsed.length > 0 ? parsed : fallback;
-};
-
-const allowedOrigins = parseCsvEnv(process.env.ALLOWED_ORIGINS, [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001',
-]);
-const allowDevCors = process.env.LEA_ALLOW_DEV_CORS === 'true';
-
 await fastify.register(cors, {
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin) || allowDevCors) {
+    if (isCorsOriginAllowed(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'), false);
@@ -158,6 +143,7 @@ const prisma = new PrismaClient({
 });
 
 fastify.decorate('prisma', prisma);
+sseManager.setPersistentEventStore(createPersistentPentestEventStore(prisma));
 
 // ============================================================================
 // SWARM ORCHESTRATOR SETUP

@@ -324,6 +324,12 @@ describe('C12 — skill step safety policy', () => {
       input: { target: 'example.com' },
       sessionId: 'session-1',
       abortController: new AbortController(),
+      runtimeContext: {
+        target: 'example.com',
+        inScope: ['example.com'],
+        outOfScope: [],
+        scopeMode: 'extended',
+      },
     });
 
     expect(result.event.isError).not.toBe(true);

@@ -9,6 +9,7 @@ export type SwarmRunStatus =
   | 'MERGING'
   | 'COMPLETED'
   | 'FAILED'
+  | 'CANCELLED'
   | 'PARTIAL_COMPLETED';
 
 export type SwarmAgentStatus =
@@ -20,6 +21,7 @@ export type SwarmAgentStatus =
   | 'FAILED';
 
 export type SwarmSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+export type FindingReviewState = 'draft' | 'validated' | 'rejected';
 
 export interface SwarmAgent {
   id: string;
@@ -46,6 +48,14 @@ export interface SwarmFinding {
   proof?: string;
   remediation?: string;
   affected_components?: string[];
+  reviewState?: FindingReviewState;
+  evidenceScore?: number;
+  verificationState?: 'PROVISIONAL' | 'CONFIRMED' | 'REJECTED';
+  reasonCodes?: string[];
+  status?: 'OPEN' | 'CONFIRMED' | 'FALSE_POSITIVE' | 'FIXED' | 'RISK_ACCEPTED';
+  verified?: boolean;
+  falsePositive?: boolean;
+  hasEvidence?: boolean;
   pushed: boolean;
   createdAt: string;
   updatedAt: string;

@@ -8,16 +8,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { usePentestList } from '@/hooks/use-pentest-list';
 import { usePentestStore } from '@/store/pentest-store';
+import { ENABLE_EXPERIMENTAL_UI } from '@/lib/feature-flags';
 
 interface NavItem {
   id: string;
   label: string;
   icon: React.ElementType;
   href: string;
+  experimental?: boolean;
 }
 
 const navItems: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/pentest/dashboard' },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/pentest/dashboard', experimental: true },
   { id: 'overview', label: 'Active Scan', icon: Target, href: '/pentest' },
   { id: 'reports', label: 'Reports', icon: FileText, href: '/reports' },
   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
@@ -107,7 +109,7 @@ export function LeftSidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         <div className="space-y-[2px] mb-5">
-          {navItems.map((item) => {
+          {navItems.filter((item) => !item.experimental || ENABLE_EXPERIMENTAL_UI).map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
 

@@ -57,6 +57,66 @@ describe('ToolExecutor', () => {
       expect(result.recoverable).toBe(true);
     });
 
+    it('should block MCP tools when runtime scope is missing', async () => {
+      const call = vi.fn(async () => ({ data: 'should not execute' }));
+      registry.registerTool(
+        buildTool({
+          name: 'mcp:nmap_scan',
+          description: 'Nmap scan',
+          source: 'mcp',
+          inputSchema: z.object({ target: z.string() }),
+          call,
+          maxResultSizeChars: 1000,
+        }),
+      );
+
+      const result = await executor.execute({
+        toolUseId: 'call_scope_001',
+        toolName: 'mcp:nmap_scan',
+        input: { target: 'app.example.com' },
+        sessionId,
+        abortController: mockAbortController,
+      });
+
+      expect(result.event.isError).toBe(true);
+      expect(result.errorCode).toBe('scope_denied');
+      expect(result.event.result).toContain('runtime scope');
+      expect(call).not.toHaveBeenCalled();
+    });
+
+    it('should block MCP target outside runtime scope before tool call', async () => {
+      const call = vi.fn(async () => ({ data: 'should not execute' }));
+      registry.registerTool(
+        buildTool({
+          name: 'mcp:nmap_scan',
+          description: 'Nmap scan',
+          source: 'mcp',
+          inputSchema: z.object({ target: z.string() }),
+          call,
+          maxResultSizeChars: 1000,
+        }),
+      );
+
+      const result = await executor.execute({
+        toolUseId: 'call_scope_002',
+        toolName: 'mcp:nmap_scan',
+        input: { target: 'outside.example.com' },
+        sessionId,
+        abortController: mockAbortController,
+        runtimeContext: {
+          target: 'app.example.com',
+          inScope: ['app.example.com'],
+          outOfScope: [],
+          scopeMode: 'extended',
+        },
+      });
+
+      expect(result.event.isError).toBe(true);
+      expect(result.errorCode).toBe('scope_denied');
+      expect(result.event.result).toContain('outside runtime scope');
+      expect(call).not.toHaveBeenCalled();
+    });
+
     it('should return error for unknown tool (non-recoverable)', async () => {
       // Act
       const result = await executor.execute({

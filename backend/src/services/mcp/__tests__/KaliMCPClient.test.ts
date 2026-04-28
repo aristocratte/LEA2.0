@@ -62,6 +62,24 @@ describe('KaliMCPClient', () => {
     expect(sendRequest).not.toHaveBeenCalled();
   });
 
+  it('does not implicitly allow context.target when explicit in-scope excludes it', async () => {
+    const client = new KaliMCPClient();
+    const sendRequest = vi.spyOn(client as unknown as { sendRequest: (...args: unknown[]) => Promise<unknown> }, 'sendRequest')
+      .mockResolvedValue({});
+
+    const result = await client.callTool(
+      'nmap_scan',
+      { target: 'outside.example.com' },
+      120000,
+      { target: 'outside.example.com', inScope: ['app.example.com'], scopeMode: 'extended' }
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('outside runtime scope');
+    expect(result.meta).toMatchObject({ blockedByScope: true });
+    expect(sendRequest).not.toHaveBeenCalled();
+  });
+
   it('returns parsed tool output for a successful JSON-RPC tool call', async () => {
     const client = new KaliMCPClient();
     vi.spyOn(client as unknown as { sendRequest: (...args: unknown[]) => Promise<unknown> }, 'sendRequest')

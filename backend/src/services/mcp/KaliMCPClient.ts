@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import net from 'node:net';
+import { evaluateToolScope } from '../../core/runtime/ScopeGuard.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,6 +23,8 @@ export interface ToolExecutionContext {
   outOfScope?: string[];
   pendingScopeDomains?: string[];
   scopeMode?: 'extended';
+  allowPrivateTargets?: boolean;
+  allowLocalTargets?: boolean;
 }
 
 export interface MCPToolResult {
@@ -357,45 +360,15 @@ export class KaliMCPClient {
   }
 
   private checkScope(toolName: string, args: Record<string, unknown>, context?: ToolExecutionContext): { allowed: boolean; reason?: string } {
-    if (!context) return { allowed: true };
+    const decision = evaluateToolScope({
+      toolName,
+      toolSource: 'mcp',
+      input: args,
+      context,
+      requireScope: false,
+    });
 
-    const lower = toolName.toLowerCase();
-    const allowList = [
-      ...(context.target ? [context.target] : []),
-      ...(context.inScope || []),
-    ].filter(Boolean);
-
-    const denyList = [...(context.outOfScope || [])].filter(Boolean);
-    const pendingScopeDomains = [...(context.pendingScopeDomains || [])].filter(Boolean);
-
-    if (lower === 'shell_exec') {
-      return this.checkShellScope(String(args.command || ''), allowList, denyList, pendingScopeDomains);
-    }
-
-    const hosts = this.extractCandidateHosts(toolName, args);
-    if (hosts.length === 0) return { allowed: true };
-
-    for (const host of hosts) {
-      if (this.isHostInList(host, denyList)) {
-        return { allowed: false, reason: `Host '${host}' is out of scope` };
-      }
-
-      if (allowList.length === 0) {
-        continue;
-      }
-
-      if (!this.isHostInList(host, allowList)) {
-        if (this.isHostInList(host, pendingScopeDomains)) {
-          return { allowed: false, reason: `Host '${host}' is pending user scope decision` };
-        }
-        if ((lower === 'curl_request' || lower === 'curl' || lower === 'http_request') && this.isPassiveOsintHost(host)) {
-          continue;
-        }
-        return { allowed: false, reason: `Host '${host}' is outside extended scope` };
-      }
-    }
-
-    return { allowed: true };
+    return decision.allowed ? { allowed: true } : { allowed: false, reason: decision.reason };
   }
 
   private extractOutput(result: any): string {

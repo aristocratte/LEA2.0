@@ -3,6 +3,7 @@ import type {
   ApiKaliAuditLog,
   ApiMessage,
   ApiPentest,
+  ApiPentestRunProjection,
   ApiProvider,
   ApiReport,
   ApiTodo,
@@ -314,6 +315,13 @@ export const pentestsApi = {
     );
   },
 
+  getProjection(pentestId: string, params?: { sinceSeq?: number; eventLimit?: number; toolLimit?: number; findingLimit?: number }) {
+    return requestJson<ApiEnvelope<ApiPentestRunProjection>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/projection`,
+      { query: params }
+    );
+  },
+
   getSwarmHistory(pentestId: string) {
     return requestJson<ApiEnvelope<SwarmRun[]>>(
       `/api/pentests/${encodeURIComponent(pentestId)}/swarm/history`
@@ -330,6 +338,13 @@ export const pentestsApi = {
   resumeSwarm(pentestId: string) {
     return requestJson<ApiEnvelope<SwarmRun>>(
       `/api/pentests/${encodeURIComponent(pentestId)}/swarm/resume`,
+      { method: 'POST' }
+    );
+  },
+
+  stopSwarm(pentestId: string) {
+    return requestJson<ApiEnvelope<SwarmRun>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/swarm/stop`,
       { method: 'POST' }
     );
   },
@@ -397,6 +412,22 @@ export const pentestsApi = {
   cancel(pentestId: string) {
     return requestJson<ApiEnvelope<{ status: string }>>(
       `/api/pentests/${encodeURIComponent(pentestId)}/cancel`,
+      { method: 'POST' }
+    );
+  },
+
+  async stop(pentestId: string) {
+    try {
+      await requestJson<ApiEnvelope<SwarmRun>>(
+        `/api/pentests/${encodeURIComponent(pentestId)}/swarm/stop`,
+        { method: 'POST' }
+      );
+    } catch {
+      // The durable pentest stop below is authoritative; missing in-memory swarm state is fine.
+    }
+
+    return requestJson<ApiEnvelope<{ status: string }>>(
+      `/api/pentests/${encodeURIComponent(pentestId)}/stop`,
       { method: 'POST' }
     );
   },

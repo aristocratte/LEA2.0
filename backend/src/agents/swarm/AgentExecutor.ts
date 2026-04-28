@@ -64,7 +64,7 @@ export class AgentExecutor {
 
     const worker = async (): Promise<void> => {
       while (true) {
-        if (runtime.forceMergeRequested) return;
+        if (runtime.forceMergeRequested || run.status !== 'RUNNING') return;
 
         const index = cursor;
         cursor += 1;
@@ -83,7 +83,7 @@ export class AgentExecutor {
   async executeAgent(runtime: SwarmRuntime, agent: Agent, template: AgentTemplate): Promise<void> {
     const run = runtime.run;
     await this.waitWhilePaused(runtime);
-    if (runtime.forceMergeRequested) return;
+    if (runtime.forceMergeRequested || run.status !== 'RUNNING') return;
 
     this.eventEmitter.updateAgent(run.pentestId, agent, {
       status: 'THINKING',
@@ -92,6 +92,8 @@ export class AgentExecutor {
     });
 
     const toolName = this.pickTool(template, agent.id);
+    if (runtime.forceMergeRequested || run.status !== 'RUNNING') return;
+
     this.eventEmitter.updateAgent(run.pentestId, agent, {
       status: 'RUNNING_TOOL',
       progress: 60,
@@ -101,6 +103,8 @@ export class AgentExecutor {
 
     const args = this.buildToolArgs(run.target, runtime.scope, agent.role);
     const correlationId = `tool-${agent.id}-${Date.now()}`;
+    if (runtime.forceMergeRequested || run.status !== 'RUNNING') return;
+
     this.emit(run.pentestId, {
       runId: run.id,
       correlationId,
@@ -115,6 +119,8 @@ export class AgentExecutor {
       },
     });
     const result = await this.toolFindingPipeline.executeTool(run.pentestId, agent.role, run.target, runtime.scope, toolName, args);
+    if (runtime.forceMergeRequested || run.status !== 'RUNNING') return;
+
     this.emit(run.pentestId, {
       runId: run.id,
       correlationId,

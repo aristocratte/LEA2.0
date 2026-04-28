@@ -117,6 +117,11 @@ describe('ReportsPage detail loading', () => {
             evidence: 'stored evidence',
             remediation: 'stored remediation',
             cvss_score: 8.7,
+            status: 'OPEN',
+            verified: false,
+            false_positive: false,
+            verification_state: 'PROVISIONAL',
+            evidence_score: 55,
             endpoint: '/api/login',
             target_host: null,
             created_at: '2026-04-26T10:00:00.000Z',
@@ -164,8 +169,67 @@ describe('ReportsPage detail loading', () => {
           cvss_score: null,
           endpoint: null,
           target_host: null,
+          status: 'OPEN',
         }),
       }),
     );
+  });
+
+  it('shows report readiness and blocks exports until findings are validated with evidence', async () => {
+    mocks.getReport.mockResolvedValue({
+      data: {
+        ...reportSummary('report-a', 'alpha.example'),
+        executive_summary: 'Executive summary for alpha.example',
+        findings: [
+          {
+            id: 'finding-1',
+            pentest_id: 'pentest-report-a',
+            report_id: 'report-a',
+            title: 'Validated finding',
+            description: 'Stored description',
+            severity: 'HIGH',
+            evidence: 'HTTP/1.1 200 OK',
+            remediation: 'stored remediation',
+            status: 'CONFIRMED',
+            verified: true,
+            false_positive: false,
+            verification_state: 'CONFIRMED',
+            evidence_score: 90,
+            endpoint: '/api/login',
+            target_host: null,
+            created_at: '2026-04-26T10:00:00.000Z',
+            updated_at: '2026-04-26T10:00:00.000Z',
+          },
+          {
+            id: 'finding-2',
+            pentest_id: 'pentest-report-a',
+            report_id: 'report-a',
+            title: 'Draft missing evidence',
+            description: 'Needs proof',
+            severity: 'LOW',
+            evidence: '',
+            remediation: 'stored remediation',
+            status: 'OPEN',
+            verified: false,
+            false_positive: false,
+            verification_state: 'PROVISIONAL',
+            evidence_score: 20,
+            endpoint: '/debug',
+            target_host: null,
+            created_at: '2026-04-26T10:00:00.000Z',
+            updated_at: '2026-04-26T10:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    render(<ReportsPage />);
+
+    expect(await screen.findByText('Needs review before export')).toBeInTheDocument();
+    expect(screen.getByText('1 validated')).toBeInTheDocument();
+    expect(screen.getByText('1 draft')).toBeInTheDocument();
+    expect(screen.getByText('1 missing evidence')).toBeInTheDocument();
+    expect(screen.getAllByTitle(/Exports unlock after every finding/i)).toHaveLength(3);
+    expect(screen.getByText('Evidence missing')).toBeInTheDocument();
   });
 });

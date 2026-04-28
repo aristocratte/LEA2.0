@@ -5,19 +5,31 @@
 import { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { sseManager } from '../services/SSEManager.js';
+import {
+  getLatestPentestEventSequence,
+  listPentestEventEnvelopes,
+  parseEventCursor,
+} from '../services/PentestEventService.js';
+import { resolveAllowedCorsOrigin } from '../services/SecurityPolicy.js';
 import type { FastifyRequestWithParams } from '../types/fastify.d.js';
 
 export async function streamRoutes(fastify: FastifyInstance) {
   // GET /api/pentests/:id/stream - SSE endpoint
   fastify.get('/api/pentests/:id/stream', async (request, reply) => {
     const { id } = request.params as FastifyRequestWithParams['params'];
-    const query = (request.query || {}) as { lastEventId?: string | number };
+    const query = (request.query || {}) as { lastEventId?: string | number; sinceSeq?: string | number };
+
+    const origin = request.headers.origin;
+    const allowedOrigin = resolveAllowedCorsOrigin(origin);
+    if (origin && !allowedOrigin) {
+      return reply.code(403).send({ error: 'Origin not allowed' });
+    }
 
     // CORS headers (reply.raw bypasses Fastify CORS plugin)
-    const origin = request.headers.origin;
-    if (origin) {
-      reply.raw.setHeader('Access-Control-Allow-Origin', origin);
+    if (allowedOrigin) {
+      reply.raw.setHeader('Access-Control-Allow-Origin', allowedOrigin);
       reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
+      reply.raw.setHeader('Vary', 'Origin');
     }
 
     // Setup SSE headers
@@ -38,7 +50,9 @@ export async function streamRoutes(fastify: FastifyInstance) {
       : request.headers['last-event-id'];
     const headerLastEventId = parseEventId(headerLastEventIdRaw);
     const queryLastEventId = parseEventId(query.lastEventId);
-    const lastEventId = headerLastEventId ?? queryLastEventId;
+    const querySinceSeq = parseEventId(query.sinceSeq);
+    const lastEventId = headerLastEventId ?? queryLastEventId ?? querySinceSeq;
+    const lastSequence = parseEventCursor(lastEventId);
 
     const client = {
       id: clientId,
@@ -55,8 +69,19 @@ export async function streamRoutes(fastify: FastifyInstance) {
       connectedAt: new Date(),
     };
 
-    // Register client with SSE manager
-    sseManager.register(id, client, { lastEventId });
+    const replayedEvents = await listPentestEventEnvelopes(fastify.prisma, id, { sinceSeq: lastSequence });
+    let latestReplaySequence = lastSequence ?? 0;
+    for (const event of replayedEvents) {
+      client.send(event.eventType, event, event.id);
+      latestReplaySequence = Math.max(latestReplaySequence, event.sequence);
+    }
+
+    const latestDurableSequence = await getLatestPentestEventSequence(fastify.prisma, id);
+    sseManager.seedSequence(id, Math.max(latestReplaySequence, latestDurableSequence));
+
+    // Register client with SSE manager after durable replay; the in-memory queue
+    // remains only a short-lived cache for events not yet flushed to storage.
+    sseManager.register(id, client, { lastEventId: latestReplaySequence > 0 ? String(latestReplaySequence) : lastEventId });
 
     // Send initial connection event
     client.send('connected', {

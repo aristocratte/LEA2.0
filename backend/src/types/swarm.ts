@@ -10,6 +10,7 @@ export type SwarmRunStatus =
   | 'MERGING'
   | 'COMPLETED'
   | 'FAILED'
+  | 'CANCELLED'
   | 'PARTIAL_COMPLETED';
 
 export type SwarmAgentStatus =

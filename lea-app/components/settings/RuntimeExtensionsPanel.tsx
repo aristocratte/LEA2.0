@@ -223,8 +223,8 @@ export function RuntimeExtensionsPanel() {
               Runtime extensions console
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-600">
-              MCP, hooks, skills, plugins and LSP are now visible as first-class product surfaces.
-              This panel is the operator view for discovery, trust and runtime health.
+              MCP, hooks, skills, plugins and LSP are admin/dev runtime surfaces.
+              This panel is the operator view for discovery, trust and runtime health outside the default MVP client experience.
             </p>
           </div>
 

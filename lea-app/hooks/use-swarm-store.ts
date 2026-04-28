@@ -118,6 +118,18 @@ export const useSwarmStore = create<SwarmStoreState>((set, get) => ({
     }),
 
     addEvent: (event) => set((state) => {
+        const isDuplicate = state.eventLog.some((current) => {
+            if (current.id && current.id === event.id) return true;
+            return typeof current.sequence === 'number'
+                && typeof event.sequence === 'number'
+                && current.runId === event.runId
+                && current.sequence === event.sequence;
+        });
+
+        if (isDuplicate) {
+            return state;
+        }
+
         // 1. Append to raw log
         const eventLog = [...state.eventLog, event];
 

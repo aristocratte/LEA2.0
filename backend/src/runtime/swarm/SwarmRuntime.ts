@@ -16,6 +16,7 @@ export interface SwarmRuntime {
   start(params: SwarmRuntimeStartParams): Promise<Swarm>;
   pause(pentestId: string): Promise<Swarm>;
   resume(pentestId: string): Promise<Swarm>;
+  stop(pentestId: string): Promise<Swarm>;
   forceMerge(pentestId: string): Promise<Swarm>;
   approveSensitiveTool(pentestId: string, approvalId: string): Promise<void>;
   denySensitiveTool(pentestId: string, approvalId: string, reason?: string): Promise<void>;

@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import type { Provider, ProviderType } from '@/types';
 import { RuntimeExtensionsPanel } from '@/components/settings/RuntimeExtensionsPanel';
+import { ENABLE_EXPERIMENTAL_RUNTIME_UI } from '@/lib/feature-flags';
 
 const PROVIDER_META: Record<ProviderType, {
   name: string;
@@ -692,6 +693,21 @@ function ProviderDetail({
   );
 }
 
+function ExperimentalRuntimeNotice() {
+  return (
+    <section className="mt-8 rounded-3xl border border-dashed border-zinc-200 bg-white px-5 py-5 text-sm text-zinc-600">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
+        Experimental runtime hidden
+      </p>
+      <h2 className="mt-2 text-lg font-semibold text-zinc-950">MVP settings stay focused on providers.</h2>
+      <p className="mt-1 max-w-2xl leading-6">
+        MCP, hooks, skills, plugins, LSP and raw runtime consoles remain available for admin/dev builds only.
+        Set <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-700">NEXT_PUBLIC_LEA_EXPERIMENTAL_RUNTIME_UI=true</code> to expose them locally.
+      </p>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const { providers, fetchProviders, selectedProviderId, selectProvider } = useProviderStore();
   const [isLoading, setIsLoading] = useState(true);
@@ -830,7 +846,11 @@ export default function SettingsPage() {
                 )}
               </AnimatePresence>
             </div>
-            <RuntimeExtensionsPanel />
+            {ENABLE_EXPERIMENTAL_RUNTIME_UI ? (
+              <RuntimeExtensionsPanel />
+            ) : (
+              <ExperimentalRuntimeNotice />
+            )}
           </div>
         </div>
       </main>

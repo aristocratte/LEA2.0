@@ -95,6 +95,15 @@ export class ReplaySwarmRuntime implements SwarmRuntime {
     return cloneRun(session.run);
   }
 
+  async stop(pentestId: string): Promise<Swarm> {
+    const session = this.requireSession(pentestId);
+    session.engine.pause();
+    session.run.status = 'CANCELLED';
+    session.run.endedAt = new Date().toISOString();
+    this.pushHistory(session.run);
+    return cloneRun(session.run);
+  }
+
   async forceMerge(pentestId: string): Promise<Swarm> {
     const session = this.requireSession(pentestId);
     await session.engine.jumpToSequence(Number.MAX_SAFE_INTEGER);

@@ -74,8 +74,13 @@ export class ToolFindingPipeline {
         resolve();
       }, 120_000);
 
-      this.state.pendingApprovals.set(approvalId, { resolve, reject, timeout });
+      this.state.pendingApprovals.set(approvalId, { pentestId, resolve, reject, timeout });
     });
+  }
+
+  private isStopped(pentestId: string): boolean {
+    const runtime = this.state.runtimeByPentestId.get(pentestId);
+    return Boolean(runtime?.forceMergeRequested || runtime?.run.status === 'CANCELLED');
   }
 
   async executeTool(
@@ -86,6 +91,15 @@ export class ToolFindingPipeline {
     toolName: string,
     args: Record<string, unknown>
   ): Promise<SwarmToolResult> {
+    if (this.isStopped(pentestId)) {
+      return {
+        success: false,
+        output: '',
+        error: 'Tool execution cancelled',
+        duration: 0,
+      };
+    }
+
     if (SENSITIVE_TOOLS.has(toolName) && this.getClientsCount(pentestId) > 0) {
       const runtime = this.state.runtimeByPentestId.get(pentestId);
       if (runtime) {
@@ -100,6 +114,15 @@ export class ToolFindingPipeline {
           };
         }
       }
+    }
+
+    if (this.isStopped(pentestId)) {
+      return {
+        success: false,
+        output: '',
+        error: 'Tool execution cancelled',
+        duration: 0,
+      };
     }
 
     if (this.toolGateway) {

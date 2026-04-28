@@ -5,9 +5,13 @@ import { sseManager } from '../../services/SSEManager.js';
 const {
   createReportFromPentestMock,
   generatePdfMock,
+  generateHtmlMock,
+  generateJsonMock,
 } = vi.hoisted(() => ({
   createReportFromPentestMock: vi.fn(),
   generatePdfMock: vi.fn(),
+  generateHtmlMock: vi.fn(),
+  generateJsonMock: vi.fn(),
 }));
 
 vi.mock('../../services/ReportService.js', () => ({
@@ -19,6 +23,8 @@ vi.mock('../../services/ReportService.js', () => ({
 vi.mock('../../services/ExportService.js', () => ({
   ExportService: class ExportService {
     generatePdf = generatePdfMock;
+    generateHtml = generateHtmlMock;
+    generateJson = generateJsonMock;
   },
 }));
 
@@ -203,7 +209,14 @@ describe('reportRoutes', () => {
       expect(response.statusCode).toBe(200);
       expect(prisma.finding.findFirst).toHaveBeenCalledWith({
         where: { id: 'finding-1', report_id: 'report-1' },
-        select: { id: true },
+        select: {
+          id: true,
+          evidence: true,
+          target_host: true,
+          endpoint: true,
+          port: true,
+          protocol: true,
+        },
       });
       expect(prisma.finding.update).toHaveBeenCalledWith({
         where: { id: 'finding-1' },
@@ -216,12 +229,63 @@ describe('reportRoutes', () => {
           remediation: 'Encode user-controlled output.',
           cvss_score: 8.1,
           endpoint: '/search',
+          verification_state: 'PROVISIONAL',
+          verified: false,
+          false_positive: false,
+          evidence_score: 0,
+          reason_codes: ['manual_edit_requires_reverification'],
         },
       });
       expect(response.json()).toMatchObject({
         data: {
           ...updatedFinding,
           updated_at: '2026-04-26T10:00:00.000Z',
+        },
+      });
+    } finally {
+      await fastify.close();
+    }
+  });
+
+  it('maps manual finding review status onto verification fields', async () => {
+    const updatedFinding = {
+      id: 'finding-1',
+      report_id: 'report-1',
+      status: 'CONFIRMED',
+      verified: true,
+      false_positive: false,
+      verification_state: 'CONFIRMED',
+      updated_at: new Date('2026-04-26T10:00:00.000Z'),
+    };
+    const { fastify, prisma } = await buildApp({
+      finding: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'finding-1',
+          evidence: 'stored evidence',
+          target_host: 'app.example.com',
+          endpoint: '/search',
+          port: 443,
+          protocol: 'https',
+        }),
+        update: vi.fn().mockResolvedValue(updatedFinding),
+      },
+    });
+
+    try {
+      const response = await fastify.inject({
+        method: 'PUT',
+        url: '/api/reports/report-1/findings/finding-1',
+        payload: { status: 'CONFIRMED' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(prisma.finding.update).toHaveBeenCalledWith({
+        where: { id: 'finding-1' },
+        data: {
+          status: 'CONFIRMED',
+          verification_state: 'CONFIRMED',
+          verified: true,
+          false_positive: false,
         },
       });
     } finally {
@@ -281,6 +345,47 @@ describe('reportRoutes', () => {
       expect(response.headers['content-disposition']).toContain('report-app.example.com.pdf');
       expect(Buffer.from(response.rawPayload).equals(pdf)).toBe(true);
       expect(generatePdfMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'report-1' }));
+    } finally {
+      await fastify.close();
+    }
+  });
+
+  it('exports only non-rejected findings and sanitizes report filenames', async () => {
+    const pdf = Buffer.from('%PDF-1.4 mocked report');
+    generatePdfMock.mockResolvedValue(pdf);
+    const findUnique = vi.fn().mockResolvedValue({
+      id: 'report-1',
+      pentest: { target: 'app.example.com/\r\nbad"target' },
+      findings: [],
+    });
+
+    const { fastify } = await buildApp({
+      report: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+        findUnique,
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+    });
+
+    try {
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/api/reports/report-1/export/pdf',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-disposition']).toContain('report-app.example.com_badtarget.pdf');
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { id: 'report-1' },
+        include: {
+          pentest: true,
+          findings: expect.objectContaining({
+            where: { verification_state: { not: 'REJECTED' } },
+          }),
+        },
+      });
     } finally {
       await fastify.close();
     }
