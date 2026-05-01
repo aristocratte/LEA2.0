@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { usePentestList } from '@/hooks/use-pentest-list';
 import { usePentestStore } from '@/store/pentest-store';
 import { ENABLE_EXPERIMENTAL_UI } from '@/lib/feature-flags';
@@ -75,7 +75,7 @@ const STATUS_DOT: Record<string, string> = {
   config: 'bg-blue-400',
 };
 
-export function LeftSidebar() {
+function LeftSidebarContent() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -264,5 +264,17 @@ export function LeftSidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+export function LeftSidebar() {
+  return (
+    <Suspense
+      fallback={
+        <aside className="h-screen w-[220px] shrink-0 border-r border-zinc-100 bg-white" />
+      }
+    >
+      <LeftSidebarContent />
+    </Suspense>
   );
 }

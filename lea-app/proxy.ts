@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
     // Check if the request is for the API
     if (request.nextUrl.pathname.startsWith('/api/')) {
         // Get the API URL from environment variables, defaulting to localhost for dev
@@ -11,7 +11,7 @@ export function middleware(request: NextRequest) {
         const newUrl = new URL(request.nextUrl.pathname, apiUrl);
         newUrl.search = request.nextUrl.search;
 
-        console.log(`[Middleware] Rewriting ${request.nextUrl.pathname} to ${newUrl.toString()}`);
+        console.log(`[Proxy] Rewriting ${request.nextUrl.pathname} to ${newUrl.toString()}`);
 
         // Rewrite the request
         return NextResponse.rewrite(newUrl);
